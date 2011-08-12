@@ -114,6 +114,7 @@ static inline struct device *msm_iommu_get_ctx(const char *ctx_name)
 {
 	return NULL;
 }
+
 #endif
 
 #endif
