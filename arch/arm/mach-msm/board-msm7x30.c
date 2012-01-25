@@ -143,6 +143,13 @@
 
 #define	PM_FLIP_MPP 5 /* PMIC MPP 06 */
 
+#define DDR1_BANK_BASE 0X20000000
+#define DDR2_BANK_BASE 0X40000000
+
+static unsigned int phys_add = DDR2_BANK_BASE;
+unsigned long ebi1_phys_offset = DDR2_BANK_BASE;
+EXPORT_SYMBOL(ebi1_phys_offset);
+
 struct pm8xxx_gpio_init_info {
 	unsigned			gpio;
 	struct pm_gpio			config;
@@ -6915,9 +6922,9 @@ static void __init msm7x30_calculate_reserve_sizes(void)
 
 static int msm7x30_paddr_to_memtype(unsigned int paddr)
 {
-	if (paddr < 0x40000000)
+	if (paddr < phys_add)
 		return MEMTYPE_EBI0;
-	if (paddr >= 0x40000000 && paddr < 0x80000000)
+	if (paddr >= phys_add && paddr < 0x80000000)
 		return MEMTYPE_EBI1;
 	return MEMTYPE_NONE;
 }
@@ -6971,6 +6978,19 @@ static void __init msm7x30_init_early(void)
 	msm7x30_allocate_memory_regions();
 }
 
+static void __init msm7x30_fixup(struct machine_desc *desc, struct tag *tags,
+				 char **cmdline, struct meminfo *mi)
+{
+	for (; tags->hdr.size; tags = tag_next(tags)) {
+		if (tags->hdr.tag == ATAG_MEM && tags->u.mem.start ==
+							DDR1_BANK_BASE) {
+				ebi1_phys_offset = DDR1_BANK_BASE;
+				phys_add = DDR1_BANK_BASE;
+				break;
+		}
+	}
+}
+
 MACHINE_START(MSM7X30_SURF, "QCT MSM7X30 SURF")
 	.boot_params = PLAT_PHYS_OFFSET + 0x100,
 	.map_io = msm7x30_map_io,
@@ -6980,6 +7000,7 @@ MACHINE_START(MSM7X30_SURF, "QCT MSM7X30 SURF")
 	.timer = &msm_timer,
 	.init_early = msm7x30_init_early,
 	.handle_irq = vic_handle_irq,
+	.fixup = msm7x30_fixup,
 MACHINE_END
 
 MACHINE_START(MSM7X30_FFA, "QCT MSM7X30 FFA")
@@ -6991,6 +7012,7 @@ MACHINE_START(MSM7X30_FFA, "QCT MSM7X30 FFA")
 	.timer = &msm_timer,
 	.init_early = msm7x30_init_early,
 	.handle_irq = vic_handle_irq,
+	.fixup = msm7x30_fixup,
 MACHINE_END
 
 MACHINE_START(MSM7X30_FLUID, "QCT MSM7X30 FLUID")
@@ -7002,6 +7024,7 @@ MACHINE_START(MSM7X30_FLUID, "QCT MSM7X30 FLUID")
 	.timer = &msm_timer,
 	.init_early = msm7x30_init_early,
 	.handle_irq = vic_handle_irq,
+	.fixup = msm7x30_fixup,
 MACHINE_END
 
 MACHINE_START(MSM8X55_SURF, "QCT MSM8X55 SURF")
@@ -7013,6 +7036,7 @@ MACHINE_START(MSM8X55_SURF, "QCT MSM8X55 SURF")
 	.timer = &msm_timer,
 	.init_early = msm7x30_init_early,
 	.handle_irq = vic_handle_irq,
+	.fixup = msm7x30_fixup,
 MACHINE_END
 
 MACHINE_START(MSM8X55_FFA, "QCT MSM8X55 FFA")
@@ -7024,6 +7048,7 @@ MACHINE_START(MSM8X55_FFA, "QCT MSM8X55 FFA")
 	.timer = &msm_timer,
 	.init_early = msm7x30_init_early,
 	.handle_irq = vic_handle_irq,
+	.fixup = msm7x30_fixup,
 MACHINE_END
 MACHINE_START(MSM8X55_SVLTE_SURF, "QCT MSM8X55 SVLTE SURF")
 	.boot_params = PHYS_OFFSET + 0x100,
@@ -7034,6 +7059,7 @@ MACHINE_START(MSM8X55_SVLTE_SURF, "QCT MSM8X55 SVLTE SURF")
 	.timer = &msm_timer,
 	.init_early = msm7x30_init_early,
 	.handle_irq = vic_handle_irq,
+	.fixup = msm7x30_fixup,
 MACHINE_END
 MACHINE_START(MSM8X55_SVLTE_FFA, "QCT MSM8X55 SVLTE FFA")
 	.boot_params = PHYS_OFFSET + 0x100,
@@ -7044,4 +7070,5 @@ MACHINE_START(MSM8X55_SVLTE_FFA, "QCT MSM8X55 SVLTE FFA")
 	.timer = &msm_timer,
 	.init_early = msm7x30_init_early,
 	.handle_irq = vic_handle_irq,
+	.fixup = msm7x30_fixup,
 MACHINE_END
