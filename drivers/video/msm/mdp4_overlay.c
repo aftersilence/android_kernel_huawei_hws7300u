@@ -2966,3 +2966,62 @@ end:
 		fput_light(srcp0_file, ps0_need);
 	return ret;
 }
+
+static struct {
+	char *name;
+	int  domain;
+} msm_iommu_ctx_names[] = {
+	/* Display */
+	{
+		.name = "mdp_vg1",
+		.domain = DISPLAY_DOMAIN,
+	},
+	/* Display */
+	{
+		.name = "mdp_vg2",
+		.domain = DISPLAY_DOMAIN,
+	},
+	/* Display */
+	{
+		.name = "mdp_rgb1",
+		.domain = DISPLAY_DOMAIN,
+	},
+	/* Display */
+	{
+		.name = "mdp_rgb2",
+		.domain = DISPLAY_DOMAIN,
+	},
+};
+
+void mdp4_iommu_attach(void)
+{
+	static int done;
+	struct iommu_domain *domain;
+	int i;
+
+	if (!done) {
+		for (i = 0; i < ARRAY_SIZE(msm_iommu_ctx_names); i++) {
+			int domain_idx;
+			struct device *ctx = msm_iommu_get_ctx(
+				msm_iommu_ctx_names[i].name);
+
+			if (!ctx)
+				continue;
+
+			domain_idx = msm_iommu_ctx_names[i].domain;
+
+			domain = msm_get_iommu_domain(domain_idx);
+			if (!domain)
+				continue;
+
+			if (iommu_attach_device(domain,	ctx)) {
+				WARN(1, "%s: could not attach domain %d to context %s."
+					" iommu programming will not occur.\n",
+					__func__, domain_idx,
+					msm_iommu_ctx_names[i].name);
+				continue;
+			}
+		}
+		done = 1;
+	}
+}
