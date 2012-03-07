@@ -233,8 +233,8 @@ void hdmi_msm_cec_msg_send(struct hdmi_msm_cec_msg *msg)
 		HDMI_MSM_CEC_RETRANSMIT_NUM(msg->retransmit)
 		| (msg->retransmit > 0) ? HDMI_MSM_CEC_RETRANSMIT_ENABLE : 0);
 #else
-		HDMI_MSM_CEC_RETRANSMIT_NUM(0)
-			| HDMI_MSM_CEC_RETRANSMIT_ENABLE);
+		HDMI_MSM_CEC_RETRANSMIT_NUM(0) |
+			HDMI_MSM_CEC_RETRANSMIT_ENABLE);
 #endif
 
 	/* 0x028C CEC_CTRL */
