@@ -283,6 +283,12 @@ int kgsl_device_snapshot(struct kgsl_device *device, int hang)
 	/* Freeze the snapshot on a hang until it gets read */
 	device->snapshot_frozen = (hang) ? 1 : 0;
 
+	/* log buffer info to aid in ramdump recovery */
+	KGSL_DRV_ERR(device, "snapshot created at va %p pa %lx size %d\n",
+			device->snapshot, __pa(device->snapshot),
+			device->snapshot_size);
+	if (hang)
+		sysfs_notify(&device->snapshot_kobj, NULL, "timestamp");
 	return 0;
 }
 EXPORT_SYMBOL(kgsl_device_snapshot);
