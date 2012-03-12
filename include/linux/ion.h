@@ -178,7 +178,7 @@ struct ion_platform_heap {
  * @mem_is_fmem		Flag indicating whether this memory is coming from fmem
  *			or not.
  * @fixed_position	If nonzero, position in the fixed area.
- * @virt_addr:		Virtual address used when using fmem.
+ * @virt_addr:	Virtual address used when using fmem.
  * @iommu_map_all:	Indicates whether we should map whole heap into IOMMU.
  * @iommu_2x_map_domain: Indicates the domain to use for overmapping.
  * @request_region:	function to be called when the number of allocations

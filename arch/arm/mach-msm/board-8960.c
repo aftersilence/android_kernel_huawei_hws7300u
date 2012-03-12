@@ -41,6 +41,7 @@
 #include <linux/ks8851.h>
 #include <linux/i2c/isa1200.h>
 #include <linux/memory.h>
+#include <linux/memblock.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -154,7 +155,7 @@ struct sx150x_platform_data msm8960_sx150x_data[] = {
 
 #define MSM8960_FIXED_AREA_START 0xb0000000
 #define MAX_FIXED_AREA_SIZE	0x10000000
-#define MSM_MM_FW_SIZE		0x200000
+#define MSM_MM_FW_SIZE		0x280000
 #define MSM8960_FW_START	(MSM8960_FIXED_AREA_START - MSM_MM_FW_SIZE)
 
 static unsigned msm_ion_sf_size = MSM_ION_SF_SIZE;
@@ -329,11 +330,17 @@ static int msm8960_paddr_to_memtype(unsigned int paddr)
 static struct ion_cp_heap_pdata cp_mm_ion_pdata = {
 	.permission_type = IPT_TYPE_MM_CARVEOUT,
 	.align = PAGE_SIZE,
+	.reusable = FMEM_ENABLED,
+	.mem_is_fmem = FMEM_ENABLED,
+	.fixed_position = FIXED_MIDDLE,
 };
 
 static struct ion_cp_heap_pdata cp_mfc_ion_pdata = {
 	.permission_type = IPT_TYPE_MFC_SHAREDMEM,
 	.align = PAGE_SIZE,
+	.reusable = 0,
+	.mem_is_fmem = FMEM_ENABLED,
+	.fixed_position = FIXED_HIGH,
 };
 
 static struct ion_co_heap_pdata co_ion_pdata = {
@@ -344,6 +351,8 @@ static struct ion_co_heap_pdata co_ion_pdata = {
 static struct ion_co_heap_pdata fw_co_ion_pdata = {
 	.adjacent_mem_id = ION_CP_MM_HEAP_ID,
 	.align = SZ_128K,
+	.mem_is_fmem = FMEM_ENABLED,
+	.fixed_position = FIXED_LOW,
 };
 #endif
 static struct ion_platform_data ion_pdata = {
@@ -425,18 +434,190 @@ struct platform_device fmem_device = {
 	.dev = { .platform_data = &fmem_pdata },
 };
 
-static void reserve_ion_memory(void)
+static void __init adjust_mem_for_liquid(void)
+{
+	unsigned int i;
+
+	if (!pmem_param_set) {
+		if (machine_is_msm8960_liquid())
+			msm_ion_sf_size = MSM_LIQUID_ION_SF_SIZE;
+
+		if (msm8960_hdmi_as_primary_selected())
+			msm_ion_sf_size = MSM_HDMI_PRIM_ION_SF_SIZE;
+
+		if (machine_is_msm8960_liquid() ||
+			msm8960_hdmi_as_primary_selected()) {
+			for (i = 0; i < ion_pdata.nr; i++) {
+				if (ion_pdata.heaps[i].id == ION_SF_HEAP_ID) {
+					ion_pdata.heaps[i].size =
+						msm_ion_sf_size;
+					pr_debug("msm_ion_sf_size 0x%x\n",
+						msm_ion_sf_size);
+					break;
+				}
+			}
+		}
+	}
+}
+
+static void __init reserve_mem_for_ion(enum ion_memory_types mem_type,
+				      unsigned long size)
+{
+	msm8960_reserve_table[mem_type].size += size;
+}
+
+static void __init msm8960_reserve_fixed_area(unsigned long fixed_area_size)
+{
+#if defined(CONFIG_ION_MSM) && defined(CONFIG_MSM_MULTIMEDIA_USE_ION)
+	int ret;
+
+	if (fixed_area_size > MAX_FIXED_AREA_SIZE)
+		panic("fixed area size is larger than %dM\n",
+			MAX_FIXED_AREA_SIZE >> 20);
+
+	reserve_info->fixed_area_size = fixed_area_size;
+	reserve_info->fixed_area_start = MSM8960_FW_START;
+
+	ret = memblock_remove(reserve_info->fixed_area_start,
+		reserve_info->fixed_area_size);
+	BUG_ON(ret);
+#endif
+}
+
+/**
+ * Reserve memory for ION and calculate amount of reusable memory for fmem.
+ * We only reserve memory for heaps that are not reusable. However, we only
+ * support one reusable heap at the moment so we ignore the reusable flag for
+ * other than the first heap with reusable flag set. Also handle special case
+ * for video heaps (MM,FW, and MFC). Video requires heaps MM and MFC to be
+ * at a higher address than FW in addition to not more than 256MB away from the
+ * base address of the firmware. This means that if MM is reusable the other
+ * two heaps must be allocated in the same region as FW. This is handled by the
+ * mem_is_fmem flag in the platform data. In addition the MM heap must be
+ * adjacent to the FW heap for content protection purposes.
+ */
+static void __init reserve_ion_memory(void)
 {
 #if defined(CONFIG_ION_MSM) && defined(CONFIG_MSM_MULTIMEDIA_USE_ION)
 	unsigned int i;
+	unsigned int reusable_count = 0;
+	unsigned int fixed_size = 0;
+	unsigned int fixed_low_size, fixed_middle_size, fixed_high_size;
+	unsigned long fixed_low_start, fixed_middle_start, fixed_high_start;
 
-	if (!pmem_param_set && machine_is_msm8960_liquid()) {
-		msm_ion_cp_mm_size = MSM_LIQUID_ION_MM_SIZE;
-		for (i = 0; i < ion_pdata.nr; i++) {
-			if (ion_pdata.heaps[i].id == ION_CP_MM_HEAP_ID) {
-				ion_pdata.heaps[i].size = msm_ion_cp_mm_size;
-				pr_debug("msm_ion_cp_mm_size 0x%x\n",
-					msm_ion_cp_mm_size);
+	adjust_mem_for_liquid();
+	fmem_pdata.size = 0;
+	fmem_pdata.reserved_size_low = 0;
+	fmem_pdata.reserved_size_high = 0;
+	fixed_low_size = 0;
+	fixed_middle_size = 0;
+	fixed_high_size = 0;
+
+	/* We only support 1 reusable heap. Check if more than one heap
+	 * is specified as reusable and set as non-reusable if found.
+	 */
+	for (i = 0; i < ion_pdata.nr; ++i) {
+		const struct ion_platform_heap *heap = &(ion_pdata.heaps[i]);
+
+		if (heap->type == ION_HEAP_TYPE_CP && heap->extra_data) {
+			struct ion_cp_heap_pdata *data = heap->extra_data;
+
+			reusable_count += (data->reusable) ? 1 : 0;
+
+			if (data->reusable && reusable_count > 1) {
+				pr_err("%s: Too many heaps specified as "
+					"reusable. Heap %s was not configured "
+					"as reusable.\n", __func__, heap->name);
+				data->reusable = 0;
+			}
+		}
+	}
+
+	for (i = 0; i < ion_pdata.nr; ++i) {
+		const struct ion_platform_heap *heap = &(ion_pdata.heaps[i]);
+
+		if (heap->extra_data) {
+			int fixed_position = NOT_FIXED;
+			int mem_is_fmem = 0;
+
+			switch (heap->type) {
+			case ION_HEAP_TYPE_CP:
+				mem_is_fmem = ((struct ion_cp_heap_pdata *)
+					heap->extra_data)->mem_is_fmem;
+				fixed_position = ((struct ion_cp_heap_pdata *)
+					heap->extra_data)->fixed_position;
+				break;
+			case ION_HEAP_TYPE_CARVEOUT:
+				mem_is_fmem = ((struct ion_co_heap_pdata *)
+					heap->extra_data)->mem_is_fmem;
+				fixed_position = ((struct ion_co_heap_pdata *)
+					heap->extra_data)->fixed_position;
+				break;
+			default:
+				break;
+			}
+
+			if (fixed_position != NOT_FIXED)
+				fixed_size += heap->size;
+			else
+				reserve_mem_for_ion(MEMTYPE_EBI1, heap->size);
+
+			if (fixed_position == FIXED_LOW)
+				fixed_low_size += heap->size;
+			else if (fixed_position == FIXED_MIDDLE)
+				fixed_middle_size += heap->size;
+			else if (fixed_position == FIXED_HIGH)
+				fixed_high_size += heap->size;
+
+			if (mem_is_fmem)
+				fmem_pdata.size += heap->size;
+		}
+	}
+
+	if (!fixed_size)
+		return;
+
+	if (fmem_pdata.size) {
+		fmem_pdata.reserved_size_low = fixed_low_size;
+		fmem_pdata.reserved_size_high = fixed_high_size;
+	}
+
+	msm8960_reserve_fixed_area(fixed_size + MSM_MM_FW_SIZE);
+
+	fixed_low_start = MSM8960_FIXED_AREA_START;
+	fixed_middle_start = fixed_low_start + fixed_low_size;
+	fixed_high_start = fixed_middle_start + fixed_middle_size;
+
+	for (i = 0; i < ion_pdata.nr; ++i) {
+		struct ion_platform_heap *heap = &(ion_pdata.heaps[i]);
+
+		if (heap->extra_data) {
+			int fixed_position = NOT_FIXED;
+
+			switch (heap->type) {
+			case ION_HEAP_TYPE_CP:
+				fixed_position = ((struct ion_cp_heap_pdata *)
+					heap->extra_data)->fixed_position;
+				break;
+			case ION_HEAP_TYPE_CARVEOUT:
+				fixed_position = ((struct ion_co_heap_pdata *)
+					heap->extra_data)->fixed_position;
+				break;
+			default:
+				break;
+			}
+
+			switch (fixed_position) {
+			case FIXED_LOW:
+				heap->base = fixed_low_start;
+				break;
+			case FIXED_MIDDLE:
+				heap->base = fixed_middle_start;
+				break;
+			case FIXED_HIGH:
+				heap->base = fixed_high_start;
+				break;
+			default:
 				break;
 			}
 		}
@@ -467,6 +648,7 @@ static void __init msm8960_calculate_reserve_sizes(void)
 static struct reserve_info msm8960_reserve_info __initdata = {
 	.memtype_reserve_table = msm8960_reserve_table,
 	.calculate_reserve_sizes = msm8960_calculate_reserve_sizes,
+	.reserve_fixed_area = msm8960_reserve_fixed_area,
 	.paddr_to_memtype = msm8960_paddr_to_memtype,
 };
 
@@ -541,7 +723,18 @@ static void __init msm8960_reserve(void)
 {
 	msm8960_set_display_params(prim_panel_name, ext_panel_name);
 	msm_reserve();
-	fmem_pdata.phys = reserve_memory_for_fmem(fmem_pdata.size);
+	if (fmem_pdata.size) {
+#if defined(CONFIG_ION_MSM) && defined(CONFIG_MSM_MULTIMEDIA_USE_ION)
+		fmem_pdata.phys = reserve_info->fixed_area_start +
+			MSM_MM_FW_SIZE;
+		pr_info("mm fw at %lx (fixed) size %x\n",
+			reserve_info->fixed_area_start, MSM_MM_FW_SIZE);
+		pr_info("fmem start %lx (fixed) size %lx\n",
+			fmem_pdata.phys, fmem_pdata.size);
+#else
+		fmem_pdata.phys = reserve_memory_for_fmem(fmem_pdata.size);
+#endif
+	}
 }
 
 static int msm8960_change_memory_power(u64 start, u64 size,
