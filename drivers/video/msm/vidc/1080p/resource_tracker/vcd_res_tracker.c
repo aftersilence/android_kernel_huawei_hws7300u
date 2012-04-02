@@ -695,6 +695,14 @@ void res_trk_init(struct device *device, u32 irq)
 		}
 		resource_context.core_type = VCD_CORE_1080P;
 		resource_context.firmware_addr.mem_type = DDL_FW_MEM;
+		if (!res_trk_pmem_alloc(&resource_context.firmware_addr,
+			VIDC_FW_SIZE, DDL_KILO_BYTE(128))) {
+			pr_err("%s() Firmware buffer allocation failed",
+				   __func__);
+			if (!res_trk_check_for_sec_session())
+				memset(&resource_context.firmware_addr, 0,
+						sizeof(resource_context.firmware_addr));
+		}
 	}
 }
 
