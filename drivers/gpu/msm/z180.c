@@ -154,13 +154,6 @@ static struct z180_device device_2d0 = {
 		},
 		.iomemname = KGSL_2D0_REG_MEMORY,
 		.ftbl = &z180_functable,
-#ifdef CONFIG_HAS_EARLYSUSPEND
-		.display_off = {
-			.level = EARLY_SUSPEND_LEVEL_STOP_DRAWING,
-			.suspend = kgsl_early_suspend_driver,
-			.resume = kgsl_late_resume_driver,
-		},
-#endif
 	},
 	.cmdwin_lock = __SPIN_LOCK_INITIALIZER(device_2d1.cmdwin_lock),
 };
@@ -189,13 +182,6 @@ static struct z180_device device_2d1 = {
 		},
 		.iomemname = KGSL_2D1_REG_MEMORY,
 		.ftbl = &z180_functable,
-		.display_off = {
-#ifdef CONFIG_HAS_EARLYSUSPEND
-			.level = EARLY_SUSPEND_LEVEL_STOP_DRAWING,
-			.suspend = kgsl_early_suspend_driver,
-			.resume = kgsl_late_resume_driver,
-#endif
-		},
 	},
 	.cmdwin_lock = __SPIN_LOCK_INITIALIZER(device_2d1.cmdwin_lock),
 };
