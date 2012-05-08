@@ -43,7 +43,9 @@ void memset32(void *_ptr, uint32_t val, unsigned count)
 int load_565rle_image(char *filename)
 {
 	struct fb_info *info;
+	int err = 0;
 	int ret;
+	unsigned short *data;
 	struct msm_fb_data_type *mfd ;
 	struct msm_fb_panel_data *pdata = NULL;
 	char* vaddr;
@@ -63,5 +65,13 @@ int load_565rle_image(char *filename)
 		}
 	}
 	return 0;
+	if (info->node == 1 || info->node == 2) {
+		err = -EPERM;
+		pr_err("%s:%d no info->screen_base on fb%d!\n",
+		       __func__, __LINE__, info->node);
+		goto err_logo_free_data;
+	}
+err_logo_free_data:
+	kfree(data);
 }
 EXPORT_SYMBOL(load_565rle_image);
