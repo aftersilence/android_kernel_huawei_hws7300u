@@ -1584,14 +1584,9 @@ field ## _store(struct device *dev, struct device_attribute *attr,	\
 		const char *buf, size_t size)				\
 {									\
 	if (size >= sizeof(buffer)) return -EINVAL;			\
-<<<<<<< HEAD
-	return strlcpy(buffer, buf, sizeof(buffer));			\
-=======
-	DONOTHING_FOR_GG_MODE();					\
 	strlcpy(buffer, buf, sizeof(buffer));				\
 	strim(buffer);							\
 	return size;							\
->>>>>>> 55faf86... usb: gadget: fix after aosp merge
 }									\
 static DEVICE_ATTR(field, S_IRUGO | S_IWUSR, field ## _show, field ## _store);
 
