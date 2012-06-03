@@ -392,6 +392,9 @@ void mdp4_mddi_overlay_restore(void)
 	if (mddi_mfd && mddi_pipe) {
 		mdp4_mddi_dma_busy_wait(mddi_mfd);
 		mdp4_overlay_update_lcd(mddi_mfd);
+
+		if (mddi_pipe->blt_addr)
+			mdp4_mddi_blt_dmap_busy_wait(mddi_mfd);
 		mdp4_mddi_overlay_kickoff(mddi_mfd, mddi_pipe);
 		mddi_mfd->dma_update_flag = 1;
 	}
@@ -399,6 +402,24 @@ void mdp4_mddi_overlay_restore(void)
 		mdp4_mddi_overlay_dmas_restore();
 }
 
+void mdp4_mddi_blt_dmap_busy_wait(struct msm_fb_data_type *mfd)
+{
+	unsigned long flag;
+	int need_wait = 0;
+
+	spin_lock_irqsave(&mdp_spin_lock, flag);
+	if (mfd->dma->dmap_busy == TRUE) {
+		INIT_COMPLETION(mfd->dma->dmap_comp);
+		need_wait++;
+	}
+	spin_unlock_irqrestore(&mdp_spin_lock, flag);
+
+	if (need_wait) {
+		/* wait until DMA finishes the current job */
+		wait_for_completion(&mfd->dma->dmap_comp);
+	}
+}
+ 
 /*
  * mdp4_mddi_cmd_dma_busy_wait: check mddi link activity
  * dsi link is a shared resource and it can only be used
