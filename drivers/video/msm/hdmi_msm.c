@@ -4404,7 +4404,6 @@ static int __devinit hdmi_msm_probe(struct platform_device *pdev)
 	hdmi_msm_state->hpd_state_timer.data = (uint32)NULL;
 
 	hdmi_msm_state->hpd_state_timer.expires = 0xffffffffL;
-	add_timer(&hdmi_msm_state->hpd_state_timer);
 
 	init_timer(&hdmi_msm_state->advanced_hpd_state_timer);
 	hdmi_msm_state->advanced_hpd_state_timer.function =
