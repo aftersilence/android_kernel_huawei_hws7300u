@@ -41,6 +41,7 @@
 
 int first_pixel_start_x;
 int first_pixel_start_y;
+static int lcdc_enabled;
 
 extern int Uderrunflag;
 
@@ -257,15 +258,13 @@ int mdp_lcdc_on(struct platform_device *pdev)
 #endif
 	mdp_histogram_ctrl_all(TRUE);
 
-	if( Uderrunflag != 2)		
-	{
-		ret = panel_next_on(pdev);
-	}
+	ret = panel_next_on(pdev);
 	if (ret == 0) {
 		/* enable LCDC block */
 		MDP_OUTP(MDP_BASE + LCDC_BASE, 1);
 		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	}
+
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
@@ -420,6 +419,18 @@ static void mdp4_overlay_lcdc_dma_busy_wait(struct msm_fb_data_type *mfd)
 		wait_for_completion(&mfd->dma->comp);
 	}
 	pr_debug("%s: done pid=%d\n", __func__, current->pid);
+}
+
+void mdp4_overlay_lcdc_start(void)
+{
+	if (!lcdc_enabled) {
+		/* enable LCDC block */
+		mdp4_iommu_attach();
+		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+		MDP_OUTP(MDP_BASE + LCDC_BASE, 1);
+		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+		lcdc_enabled = 1;
+	}
 }
 
 void mdp4_overlay_lcdc_vsync_push(struct msm_fb_data_type *mfd,

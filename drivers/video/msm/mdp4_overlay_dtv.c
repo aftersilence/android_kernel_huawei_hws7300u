@@ -532,6 +532,18 @@ static void mdp4_overlay_dtv_wait4_ov_done(struct msm_fb_data_type *mfd,
 		mdp4_overlay_dtv_wait4dmae(mfd);
 }
 
+void mdp4_overlay_dtv_start(void)
+{
+	if (!dtv_enabled) {
+		mdp4_iommu_attach();
+		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+		/* enable DTV block */
+		MDP_OUTP(MDP_BASE + DTV_BASE, 1);
+		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+		dtv_enabled = 1;
+	}
+}
+
 void mdp4_overlay_dtv_ov_done_push(struct msm_fb_data_type *mfd,
 			struct mdp4_overlay_pipe *pipe)
 {

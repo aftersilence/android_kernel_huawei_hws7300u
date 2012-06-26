@@ -287,7 +287,6 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 		/* enable DSI block */
 		MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE, 1);
 		mdp_pipe_ctrl(MDP_OVERLAY0_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-
 		if (display_on != NULL) {
 			msleep(50);
 			display_on(pdev);
@@ -516,6 +515,18 @@ static void mdp4_overlay_dsi_video_dma_busy_wait(struct msm_fb_data_type *mfd)
 		wait_for_completion(&mfd->dma->comp);
 	}
 	pr_debug("%s: done pid=%d\n", __func__, current->pid);
+}
+
+void mdp4_overlay_dsi_video_start(void)
+{
+	if (!dsi_video_enabled) {
+		/* enable DSI block */
+		mdp4_iommu_attach();
+		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+		MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE, 1);
+		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+		dsi_video_enabled = 1;
+	}
 }
 
 void mdp4_overlay_dsi_video_vsync_push(struct msm_fb_data_type *mfd,
