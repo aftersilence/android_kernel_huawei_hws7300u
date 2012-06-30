@@ -652,7 +652,7 @@ void mdp4_dsi_cmd_overlay_kickoff(struct msm_fb_data_type *mfd,
 {
 	unsigned long flag;
 
-
+	mdp4_iommu_attach();
 	/* change mdp clk */
 	mdp4_set_perf_level();
 
