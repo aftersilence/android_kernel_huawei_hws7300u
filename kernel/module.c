@@ -1025,6 +1025,9 @@ static int check_version(Elf_Shdr *sechdrs,
         if(!strncmp("dhd", mod->name, 3))
         return 1;
 
+        if(!strncmp("rpc_server_handset", mod->name, 18))
+        return 1;
+
 	/* Exporting module didn't supply crcs?  OK, we're already tainted. */
 	if (!crc)
 		return 1;
