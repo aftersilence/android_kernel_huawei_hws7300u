@@ -2010,6 +2010,7 @@ int uart_resume_port(struct uart_driver *drv, struct uart_port *uport)
 		 * We need this change.
 		 *
 		 */
+
 		if (console_suspend_enabled)
 			uart_change_pm(state, 0);
 		uport->ops->set_termios(uport, &termios, NULL);
