@@ -210,12 +210,24 @@ po188_get_pro_level(s32 fsr)
 	int value;
 
 	value = (fsr * app_range) / max_voltage;
-	if(value <= 59)
-		value = 40;
-	else if(value <= 253)
+	if(value <= 10)
+		value = 5;
+        else if(value <= 25)
+		value = 30;
+        else if(value <= 50)
+		value = 60;
+        else if(value <= 90)
+		value = 90;
+        else if(value <= 120)
+		value = 110;
+        else if(value <= 170)
 		value = 130;
-	else
-		value = 210;
+        else if(value <= 210)
+		value = 180;
+        else if(value <= 223)
+		value = 200;
+        else
+		value = 225;
     return value;
 }
 
