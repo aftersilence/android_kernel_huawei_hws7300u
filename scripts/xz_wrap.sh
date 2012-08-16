@@ -21,3 +21,4 @@ case $ARCH in
 esac
 
 exec xz --check=crc32 $BCJ --lzma2=$LZMA2OPTS,dict=32MiB
+
