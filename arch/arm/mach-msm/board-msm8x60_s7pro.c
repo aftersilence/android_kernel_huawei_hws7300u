@@ -191,6 +191,12 @@ static struct platform_device ion_dev;
 #define GPIO_BCM43XX_WL_RST_N		28
 #define GPIO_SIM_DETECT (132)
 
+#ifdef CONFIG_CPU_FREQ_GOV_BADASS_2_PHASE
+int set_two_phase_freq_badass(int cpufreq);
+#endif
+#ifdef CONFIG_CPU_FREQ_GOV_BADASS_3_PHASE
+int set_three_phase_freq_badass(int cpufreq);
+#endif
 
 enum {
 	GPIO_EXPANDER_IRQ_BASE  = PM8901_IRQ_BASE + NR_PMIC8901_IRQS,
@@ -12433,7 +12439,14 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 			machine_is_msm8x60_dragon())
 		msm8x60_init_ebi2();
 #endif
-	msm8x60_init_tlmm();
+#ifdef CONFIG_CPU_FREQ_GOV_BADASS_2_PHASE
+set_two_phase_freq_badass(CONFIG_CPU_FREQ_GOV_BADASS_2_PHASE_FREQ);
+#endif
+#ifdef CONFIG_CPU_FREQ_GOV_BADASS_3_PHASE
+set_three_phase_freq_badass(CONFIG_CPU_FREQ_GOV_BADASS_3_PHASE_FREQ);
+#endif
+
+        msm8x60_init_tlmm();
 	msm8x60_init_uart12dm();
 	msm8x60_init_mmc();
 
