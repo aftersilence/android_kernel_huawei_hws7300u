@@ -73,3 +73,4 @@ obj-$(CONFIG_TI_TPA2028D1)	+= tpa2028d1.o
 #
 obj-$(CONFIG_VERSION_S7PRO)	+= version_s7pro.o
 #
+obj-$(CONFIG_FSYNC_CONTROL)  += fsync_control.o
