@@ -107,6 +107,8 @@ struct ion_handle {
 	unsigned int iommu_map_cnt;
 };
 
+static void ion_iommu_release(struct kref *kref);
+
 static int ion_validate_buffer_flags(struct ion_buffer *buffer,
 					unsigned long flags)
 {
@@ -151,7 +153,7 @@ static void ion_buffer_add(struct ion_device *dev,
 	rb_insert_color(&buffer->node, &dev->buffers);
 }
 
-void ion_iommu_add(struct ion_buffer *buffer,
+static void ion_iommu_add(struct ion_buffer *buffer,
 			  struct ion_iommu_map *iommu)
 {
 	struct rb_node **p = &buffer->iommu_maps.rb_node;
@@ -235,11 +237,44 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 	return buffer;
 }
 
+/**
+ * Check for delayed IOMMU unmapping. Also unmap any outstanding
+ * mappings which would otherwise have been leaked.
+ */
+static void ion_iommu_delayed_unmap(struct ion_buffer *buffer)
+{
+	struct ion_iommu_map *iommu_map;
+	struct rb_node *node;
+	const struct rb_root *rb = &(buffer->iommu_maps);
+	unsigned long ref_count;
+	unsigned int delayed_unmap;
+
+	mutex_lock(&buffer->lock);
+
+	while ((node = rb_first(rb)) != 0) {
+		iommu_map = rb_entry(node, struct ion_iommu_map, node);
+		ref_count = atomic_read(&iommu_map->ref.refcount);
+		delayed_unmap = iommu_map->flags & ION_IOMMU_UNMAP_DELAYED;
+
+		if ((delayed_unmap && ref_count > 1) || !delayed_unmap) {
+			pr_err("%s: Virtual memory address leak in domain %u, partition %u\n",
+				__func__, iommu_map->domain_info[DI_DOMAIN_NUM],
+				iommu_map->domain_info[DI_PARTITION_NUM]);
+		}
+		/* set ref count to 1 to force release */
+		kref_init(&iommu_map->ref);
+		kref_put(&iommu_map->ref, ion_iommu_release);
+	}
+
+	mutex_unlock(&buffer->lock);
+}
+
 static void ion_buffer_destroy(struct kref *kref)
 {
 	struct ion_buffer *buffer = container_of(kref, struct ion_buffer, ref);
 	struct ion_device *dev = buffer->dev;
 
+	ion_iommu_delayed_unmap(buffer);
 	buffer->heap->ops->free(buffer);
 	mutex_lock(&dev->lock);
 	rb_erase(&buffer->node, &dev->buffers);
@@ -437,6 +472,7 @@ end:
 	ion_buffer_put(buffer);
 	return handle;
 }
+EXPORT_SYMBOL(ion_alloc);
 
 void ion_free(struct ion_client *client, struct ion_handle *handle)
 {
@@ -454,6 +490,7 @@ void ion_free(struct ion_client *client, struct ion_handle *handle)
 	ion_handle_put(handle);
 	mutex_unlock(&client->lock);
 }
+EXPORT_SYMBOL(ion_free);
 
 static void ion_client_get(struct ion_client *client);
 static int ion_client_put(struct ion_client *client);
@@ -511,6 +548,7 @@ int ion_phys(struct ion_client *client, struct ion_handle *handle,
 	ret = buffer->heap->ops->phys(buffer->heap, buffer, addr, len);
 	return ret;
 }
+EXPORT_SYMBOL(ion_phys);
 
 void *ion_map_kernel(struct ion_client *client, struct ion_handle *handle,
 			unsigned long flags)
@@ -557,8 +595,9 @@ out:
 	mutex_unlock(&client->lock);
 	return vaddr;
 }
+EXPORT_SYMBOL(ion_map_kernel);
 
-int __ion_iommu_map(struct ion_buffer *buffer,
+static struct ion_iommu_map *__ion_iommu_map(struct ion_buffer *buffer,
 		int domain_num, int partition_num, unsigned long align,
 		unsigned long iova_length, unsigned long flags,
 		unsigned long *iova)
@@ -569,7 +608,7 @@ int __ion_iommu_map(struct ion_buffer *buffer,
 	data = kmalloc(sizeof(*data), GFP_ATOMIC);
 
 	if (!data)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 
 	data->buffer = buffer;
 	iommu_map_domain(data) = domain_num;
@@ -590,24 +629,27 @@ int __ion_iommu_map(struct ion_buffer *buffer,
 
 	ion_iommu_add(buffer, data);
 
-	return 0;
+	return data;
 
 out:
-	msm_free_iova_address(data->iova_addr, domain_num, partition_num,
-				buffer->size);
 	kfree(data);
-	return ret;
+	return ERR_PTR(ret);
 }
 
 int ion_map_iommu(struct ion_client *client, struct ion_handle *handle,
 			int domain_num, int partition_num, unsigned long align,
 			unsigned long iova_length, unsigned long *iova,
 			unsigned long *buffer_size,
-			unsigned long flags)
+			unsigned long flags, unsigned long iommu_flags)
 {
 	struct ion_buffer *buffer;
 	struct ion_iommu_map *iommu_map;
 	int ret = 0;
+
+	if (ION_IS_CACHED(flags)) {
+		pr_err("%s: Cannot map iommu as cached.\n", __func__);
+		return -EINVAL;
+	}
 
 	mutex_lock(&client->lock);
 	if (!ion_handle_validate(client, handle)) {
@@ -624,11 +666,6 @@ int ion_map_iommu(struct ion_client *client, struct ion_handle *handle,
 		pr_err("%s: map_iommu is not implemented by this heap.\n",
 		       __func__);
 		ret = -ENODEV;
-		goto out;
-	}
-
-	if (ion_validate_buffer_flags(buffer, flags)) {
-		ret = -EEXIST;
 		goto out;
 	}
 
@@ -661,17 +698,30 @@ int ion_map_iommu(struct ion_client *client, struct ion_handle *handle,
 	}
 
 	iommu_map = ion_iommu_lookup(buffer, domain_num, partition_num);
-	if (_ion_map(&buffer->iommu_map_cnt, &handle->iommu_map_cnt) ||
-		!iommu_map) {
-		ret = __ion_iommu_map(buffer, domain_num, partition_num, align,
-					iova_length, flags, iova);
-		if (ret < 0)
+	_ion_map(&buffer->iommu_map_cnt, &handle->iommu_map_cnt);
+	if (!iommu_map) {
+		iommu_map = __ion_iommu_map(buffer, domain_num, partition_num,
+					    align, iova_length, flags, iova);
+		if (IS_ERR_OR_NULL(iommu_map)) {
 			_ion_unmap(&buffer->iommu_map_cnt,
 				   &handle->iommu_map_cnt);
+		} else {
+			iommu_map->flags = iommu_flags;
+
+			if (iommu_map->flags & ION_IOMMU_UNMAP_DELAYED)
+				kref_get(&iommu_map->ref);
+		}
 	} else {
-		if (iommu_map->mapped_size != iova_length) {
+		if (iommu_map->flags != iommu_flags) {
+			pr_err("%s: handle %p is already mapped with iommu flags %lx, trying to map with flags %lx\n",
+				__func__, handle,
+				iommu_map->flags, iommu_flags);
+			_ion_unmap(&buffer->iommu_map_cnt,
+				   &handle->iommu_map_cnt);
+			ret = -EINVAL;
+		} else if (iommu_map->mapped_size != iova_length) {
 			pr_err("%s: handle %p is already mapped with length"
-				" %x, trying to map with length %lx\n",
+					" %x, trying to map with length %lx\n",
 				__func__, handle, iommu_map->mapped_size,
 				iova_length);
 			_ion_unmap(&buffer->iommu_map_cnt,
@@ -775,6 +825,7 @@ out:
 	mutex_unlock(&client->lock);
 	return sglist;
 }
+EXPORT_SYMBOL(ion_map_dma);
 
 void ion_unmap_kernel(struct ion_client *client, struct ion_handle *handle)
 {
@@ -790,6 +841,7 @@ void ion_unmap_kernel(struct ion_client *client, struct ion_handle *handle)
 	mutex_unlock(&buffer->lock);
 	mutex_unlock(&client->lock);
 }
+EXPORT_SYMBOL(ion_unmap_kernel);
 
 void ion_unmap_dma(struct ion_client *client, struct ion_handle *handle)
 {
@@ -805,7 +857,7 @@ void ion_unmap_dma(struct ion_client *client, struct ion_handle *handle)
 	mutex_unlock(&buffer->lock);
 	mutex_unlock(&client->lock);
 }
-
+EXPORT_SYMBOL(ion_unmap_dma);
 
 struct ion_buffer *ion_share(struct ion_client *client,
 				 struct ion_handle *handle)
@@ -827,6 +879,7 @@ struct ion_buffer *ion_share(struct ion_client *client,
 	 */
 	return handle->buffer;
 }
+EXPORT_SYMBOL(ion_share);
 
 struct ion_handle *ion_import(struct ion_client *client,
 			      struct ion_buffer *buffer)
@@ -848,6 +901,7 @@ end:
 	mutex_unlock(&client->lock);
 	return handle;
 }
+EXPORT_SYMBOL(ion_import);
 
 static int check_vaddr_bounds(unsigned long start, unsigned long end)
 {
@@ -936,6 +990,7 @@ end:
 	fput(file);
 	return handle;
 }
+EXPORT_SYMBOL(ion_import_fd);
 
 static int ion_debug_client_show(struct seq_file *s, void *unused)
 {
@@ -1043,14 +1098,13 @@ struct ion_client *ion_client_create(struct ion_device *dev,
 	client->handles = RB_ROOT;
 	mutex_init(&client->lock);
 
-	client->name = kzalloc(sizeof(name_len+1), GFP_KERNEL);
+	client->name = kzalloc(name_len+1, GFP_KERNEL);
 	if (!client->name) {
 		put_task_struct(current->group_leader);
 		kfree(client);
 		return ERR_PTR(-ENOMEM);
 	} else {
-		strncpy(client->name, name, name_len);
-		client->name[name_len] = '\0';
+		strlcpy(client->name, name, name_len+1);
 	}
 
 	client->heap_mask = heap_mask;
@@ -1137,6 +1191,7 @@ void ion_client_destroy(struct ion_client *client)
 	if (client)
 		ion_client_put(client);
 }
+EXPORT_SYMBOL(ion_client_destroy);
 
 int ion_handle_get_flags(struct ion_client *client, struct ion_handle *handle,
 			unsigned long *flags)
@@ -1684,7 +1739,6 @@ int ion_secure_heap(struct ion_device *dev, int heap_id)
 	mutex_unlock(&dev->lock);
 	return ret_val;
 }
-EXPORT_SYMBOL(ion_secure_heap);
 
 int ion_unsecure_heap(struct ion_device *dev, int heap_id)
 {
@@ -1711,7 +1765,6 @@ int ion_unsecure_heap(struct ion_device *dev, int heap_id)
 	mutex_unlock(&dev->lock);
 	return ret_val;
 }
-EXPORT_SYMBOL(ion_unsecure_heap);
 
 static int ion_debug_leak_show(struct seq_file *s, void *unused)
 {

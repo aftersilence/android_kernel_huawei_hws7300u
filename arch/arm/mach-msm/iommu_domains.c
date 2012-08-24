@@ -13,6 +13,7 @@
 #include <mach/msm_subsystem_map.h>
 #include <linux/memory_alloc.h>
 #include <linux/iommu.h>
+#include <linux/vmalloc.h>
 #include <asm/sizes.h>
 #include <asm/page.h>
 #include <linux/init.h>
@@ -20,8 +21,8 @@
 #include <mach/iommu_domains.h>
 #include <mach/socinfo.h>
 
-/* dummy 4k for overmapping */
-char iommu_dummy[2*PAGE_SIZE-4];
+/* dummy 64K for overmapping */
+char iommu_dummy[2*SZ_64K-4];
 
 struct msm_iommu_domain {
 	/* iommu domain to map in */
@@ -165,35 +166,50 @@ static struct msm_iommu_domain msm_iommu_domains[] = {
 int msm_iommu_map_extra(struct iommu_domain *domain,
 				unsigned long start_iova,
 				unsigned long size,
+				unsigned long page_size,
 				int cached)
 {
-	int i, ret;
-	unsigned long temp_iova;
+	int i, ret_value = 0;
+	unsigned long order = get_order(page_size);
+	unsigned long aligned_size = ALIGN(size, page_size);
+	unsigned long nrpages = aligned_size >> (PAGE_SHIFT + order);
+	unsigned long phy_addr = ALIGN(virt_to_phys(iommu_dummy), page_size);
+	unsigned long temp_iova = start_iova;
 
-	for (i = size, temp_iova = start_iova; i > 0; i -= SZ_4K,
-						temp_iova += SZ_4K) {
-		ret = iommu_map(domain, temp_iova,
-				PFN_ALIGN(virt_to_phys(iommu_dummy)),
-				get_order(SZ_4K),
-				0);
-
+	for (i = 0; i < nrpages; i++) {
+		int ret = iommu_map(domain, temp_iova, phy_addr, order, cached);
 		if (ret) {
-			pr_err("%s: could not map %lx to dummy page in domain"
-				" %p\n",
-				__func__, temp_iova, domain);
+			pr_err("%s: could not map %lx in domain %p, error: %d\n",
+				__func__, start_iova, domain, ret);
+			ret_value = -EAGAIN;
 			goto out;
 		}
+		temp_iova += page_size;
 	}
-
-	return 0;
-
+	return ret_value;
 out:
+	for (; i > 0; --i) {
+		temp_iova -= page_size;
+		iommu_unmap(domain, start_iova, order);
+	}
+	return ret_value;
+}
 
-	for ( ; i < size; i += SZ_4K, temp_iova -= SZ_4K)
-		iommu_unmap(domain, temp_iova, get_order(SZ_4K));
+void msm_iommu_unmap_extra(struct iommu_domain *domain,
+				unsigned long start_iova,
+				unsigned long size,
+				unsigned long page_size)
+{
+	int i;
+	unsigned long order = get_order(page_size);
+	unsigned long aligned_size = ALIGN(size, page_size);
+	unsigned long nrpages =  aligned_size >> (PAGE_SHIFT + order);
+	unsigned long temp_iova = start_iova;
 
-	return -EINVAL;
-
+	for (i = 0; i < nrpages; ++i) {
+		iommu_unmap(domain, temp_iova, order);
+		temp_iova += page_size;
+	}
 }
 
 
