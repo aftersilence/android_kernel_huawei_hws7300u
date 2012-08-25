@@ -3010,6 +3010,9 @@ static int msmfb_handle_pp_ioctl(struct msmfb_mdp_pp *pp_ptr)
 	case mdp_op_lut_cfg:
 		switch (pp_ptr->data.lut_cfg_data.lut_type) {
 		case mdp_lut_igc:
+			ret = mdp4_igc_lut_config(
+					(struct mdp_igc_lut_data *)
+					&pp_ptr->data.lut_cfg_data.data);
 			break;
 
 		case mdp_lut_pgc:
@@ -3018,6 +3021,9 @@ static int msmfb_handle_pp_ioctl(struct msmfb_mdp_pp *pp_ptr)
 			break;
 
 		case mdp_lut_hist:
+			ret = mdp_hist_lut_config(
+					(struct mdp_hist_lut_data *)
+					&pp_ptr->data.lut_cfg_data.data);
 			break;
 
 		default:

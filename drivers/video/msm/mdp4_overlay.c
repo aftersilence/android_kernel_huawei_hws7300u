@@ -254,6 +254,7 @@ void mdp4_overlay_dmae_xy(struct mdp4_overlay_pipe *pipe)
 void mdp4_overlay_dmap_cfg(struct msm_fb_data_type *mfd, int lcdc)
 {
 	uint32	dma2_cfg_reg;
+	uint32 mask, curr;
 
 	dma2_cfg_reg = DMA_DITHER_EN;
 #ifdef BLT_RGB565
@@ -286,6 +287,9 @@ void mdp4_overlay_dmap_cfg(struct msm_fb_data_type *mfd, int lcdc)
 #endif
 
 	/* dma2 config register */
+	curr = inpdw(MDP_BASE + 0x90000);
+	mask = 0xBFFFFFFF;
+	dma2_cfg_reg = (dma2_cfg_reg & mask) | (curr & ~mask);
 	MDP_OUTP(MDP_BASE + 0x90000, dma2_cfg_reg);
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
@@ -428,6 +432,7 @@ void mdp4_overlay_rgb_setup(struct mdp4_overlay_pipe *pipe)
 	char *rgb_base;
 	uint32 src_size, src_xy, dst_size, dst_xy;
 	uint32 format, pattern;
+	uint32 curr, mask;
 
 	rgb_base = MDP_BASE + MDP4_RGB_BASE;
 	rgb_base += (MDP4_RGB_OFF * pipe->pipe_num);
@@ -445,6 +450,12 @@ void mdp4_overlay_rgb_setup(struct mdp4_overlay_pipe *pipe)
 #endif
 
 	mdp4_scale_setup(pipe);
+
+	/* Ensure proper covert matrix loaded when color space swaps */
+	curr = inpdw(rgb_base + 0x0058);
+	/* Don't touch bits you don't want to configure*/
+	mask = 0xFFFEFFFF;
+	pipe->op_mode = (pipe->op_mode & mask) | (curr & ~mask);
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 
@@ -531,7 +542,7 @@ void mdp4_overlay_vg_setup(struct mdp4_overlay_pipe *pipe)
 	char *vg_base;
 	uint32 frame_size, src_size, src_xy, dst_size, dst_xy;
 	uint32 format, pattern, luma_offset, chroma_offset;
-	uint32 mask, curr;
+	uint32 mask, curr, addr;
 	int pnum, ptype;
 
 	pnum = pipe->pipe_num - OVERLAY_PIPE_VG1; /* start from 0 */
@@ -586,13 +597,20 @@ void mdp4_overlay_vg_setup(struct mdp4_overlay_pipe *pipe)
 	/* Ensure proper covert matrix loaded when color space swaps */
 	curr = inpdw(vg_base + 0x0058);
 	mask = 0x600;
+
 	if ((curr & mask) != (pipe->op_mode & mask)) {
-		curr = ((uint32_t)vg_base) + 0x4000;
+		addr = ((uint32_t)vg_base) + 0x4000;
 		if (ptype != OVERLAY_TYPE_RGB)
-			mdp4_csc_write(&(mdp_csc_convert[1]), curr);
+			mdp4_csc_write(&(mdp_csc_convert[1]), addr);
 		else
-			mdp4_csc_write(&(mdp_csc_convert[0]), curr);
+			mdp4_csc_write(&(mdp_csc_convert[0]), addr);
+
+		mask = 0xFFFCFFFF;
+	} else {
+		/* Don't touch bits you don't want to configure*/
+		mask = 0xFFFCF1FF;
 	}
+	pipe->op_mode = (pipe->op_mode & mask) | (curr & ~mask);
 
 	/* luma component plane */
 	outpdw(vg_base + 0x0010, pipe->srcp0_addr + luma_offset);
@@ -2035,7 +2053,8 @@ static int mdp4_overlay_is_rgb_type(int format)
 	}
 }
 
-static uint32 mdp4_overlay_get_perf_level(struct mdp_overlay *req)
+static uint32 mdp4_overlay_get_perf_level(struct mdp_overlay *req,
+					  struct msm_fb_data_type *mfd)
 {
 	int is_fg;
 
@@ -2058,20 +2077,29 @@ static uint32 mdp4_overlay_get_perf_level(struct mdp_overlay *req)
 	else if (mdp4_overlay_is_rgb_type(req->src.format))
 		return OVERLAY_PERF_LEVEL1;
 
-#if 0
+
 	if (req->src.width*req->src.height <= OVERLAY_VGA_SIZE)
 		return OVERLAY_PERF_LEVEL3;
 	else if (req->src.width*req->src.height <= OVERLAY_720P_TILE_SIZE)
-		return OVERLAY_PERF_LEVEL2;
+		+		return OVERLAY_PERF_LEVEL4;
+	else if (req->src.width*req->src.height <= OVERLAY_720P_TILE_SIZE) {
+		u32 max, min;
+		max = (req->dst_rect.h > req->dst_rect.w) ?
+			req->dst_rect.h : req->dst_rect.w;
+		min = (mfd->panel_info.yres > mfd->panel_info.xres) ?
+			mfd->panel_info.xres : mfd->panel_info.yres;
+		if (max > min)	/* landscape mode */
+			return OVERLAY_PERF_LEVEL3;
+		else		/* potrait mode */
+			return OVERLAY_PERF_LEVEL2;
+	}
 	else
 		return OVERLAY_PERF_LEVEL1;
-#else
 	if (req->src.width*req->src.height <= OVERLAY_VGA_SIZE)
                 return OVERLAY_PERF_LEVEL3;
         else
                 return OVERLAY_PERF_LEVEL1;
 
-#endif
 }
 
 void mdp4_update_perf_level(u32 perf_level)
@@ -2175,7 +2203,7 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 		return -EINTR;
 	}
 
-	perf_level = mdp4_overlay_get_perf_level(req);
+	perf_level = mdp4_overlay_get_perf_level(req, mfd);
 
 	mixer = mfd->panel_info.pdest;	/* DISPLAY_1 or DISPLAY_2 */
 
