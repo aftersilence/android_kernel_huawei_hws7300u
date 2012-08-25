@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -44,123 +44,10 @@ struct {
 	char *name;
 	int  domain;
 } msm_iommu_ctx_names[] = {
-	/* Camera */
-	{
-		.name = "vpe_src",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Camera */
-	{
-		.name = "vpe_dst",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Camera */
-	{
-		.name = "vfe_imgwr",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Camera */
-	{
-		.name = "vfe_misc",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Camera */
-	{
-		.name =	"ijpeg_src",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Camera */
-	{
-		.name =	"ijpeg_dst",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Camera */
-	{
-		.name = "jpegd_src",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Camera */
-	{
-		.name = "jpegd_dst",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Display */
-	{
-		.name = "mdp_vg1",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Display */
-	{
-		.name = "mdp_vg2",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Display */
-	{
-		.name = "mdp_rgb1",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Display */
-	{
-		.name = "mdp_rgb2",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Rotator */
-	{
-		.name = "rot_src",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Rotator */
-	{
-		.name = "rot_dst",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Video */
-	{
-		.name = "vcodec_a_mm1",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Video */
-	{
-		.name = "vcodec_b_mm2",
-		.domain = GLOBAL_DOMAIN,
-	},
-	/* Video */
-	{
-		.name = "vcodec_a_stream",
-		.domain = GLOBAL_DOMAIN,
-	},
-};
-
-static struct mem_pool global_pools[] =  {
-	[VIDEO_FIRMWARE_POOL] =
-	/* Low addresses, intended for video firmware */
-		{
-			.paddr	= SZ_128K,
-			.size	= SZ_16M - SZ_128K,
-		},
-	[LOW_256MB_POOL] =
-	/*
-	 * Video can only access first 256MB of memory
-	 * dedicated pool for such allocations
-	 */
-		{
-			.paddr	= SZ_16M,
-			.size	= SZ_256M - SZ_16M,
-		},
-	[HIGH_POOL] =
-	/* Remaining address space up to 2G */
-		{
-			.paddr	= SZ_256M,
-			.size	= SZ_2G - SZ_256M,
-		}
 };
 
 
 static struct msm_iommu_domain msm_iommu_domains[] = {
-	[GLOBAL_DOMAIN] = {
-		.iova_pools = global_pools,
-		.npools = ARRAY_SIZE(global_pools),
-	}
 };
 
 int msm_iommu_map_extra(struct iommu_domain *domain,
@@ -221,9 +108,22 @@ struct iommu_domain *msm_get_iommu_domain(int domain_num)
 		return NULL;
 }
 
+static unsigned long subsystem_to_domain_tbl[] = {
+	VIDEO_DOMAIN,
+	VIDEO_DOMAIN,
+	CAMERA_DOMAIN,
+	DISPLAY_DOMAIN,
+	ROTATOR_DOMAIN,
+	0xFFFFFFFF
+};
+
 unsigned long msm_subsystem_get_domain_no(int subsys_id)
 {
-	return GLOBAL_DOMAIN;
+	if (subsys_id > INVALID_SUBSYS_ID && subsys_id <= MAX_SUBSYSTEM_ID &&
+	    subsys_id < ARRAY_SIZE(subsystem_to_domain_tbl))
+		return subsystem_to_domain_tbl[subsys_id];
+	else
+		return subsystem_to_domain_tbl[MAX_SUBSYSTEM_ID];
 }
 
 unsigned long msm_subsystem_get_partition_no(int subsys_id)
@@ -232,11 +132,11 @@ unsigned long msm_subsystem_get_partition_no(int subsys_id)
 	case MSM_SUBSYSTEM_VIDEO_FWARE:
 		return VIDEO_FIRMWARE_POOL;
 	case MSM_SUBSYSTEM_VIDEO:
-		return LOW_256MB_POOL;
+		return VIDEO_MAIN_POOL;
 	case MSM_SUBSYSTEM_CAMERA:
 	case MSM_SUBSYSTEM_DISPLAY:
 	case MSM_SUBSYSTEM_ROTATOR:
-		return HIGH_POOL;
+		return GEN_POOL;
 	default:
 		return 0xFFFFFFFF;
 	}
@@ -297,10 +197,8 @@ void msm_free_iova_address(unsigned long iova,
 
 int msm_use_iommu()
 {
-	/*
-	 * For now, just detect if the iommu is attached.
-	 */
-	return iommu_found();
+	/* Kill use of the iommu by these clients for now. */
+	return 0;
 }
 
 static int __init msm_subsystem_iommu_init(void)
