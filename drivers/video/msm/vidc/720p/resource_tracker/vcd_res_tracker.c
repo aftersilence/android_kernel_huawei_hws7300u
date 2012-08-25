@@ -16,9 +16,9 @@
 #include <linux/regulator/consumer.h>
 #include <mach/clk.h>
 #include <linux/interrupt.h>
-#include "vidc_type.h"
+#include <media/msm/vidc_init.h>
+#include <media/msm/vidc_type.h>
 #include "vcd_res_tracker.h"
-#include "vidc_init.h"
 
 #define MSM_AXI_QOS_NAME "msm_vidc_reg"
 #define AXI_CLK_SCALING
@@ -732,6 +732,16 @@ u32 res_trk_get_disable_fullhd(void)
 int res_trk_check_for_sec_session()
 {
 	return 0;
+}
+
+void res_trk_secure_unset(void)
+{
+	return;
+}
+
+void res_trk_secure_set(void)
+{
+	return;
 }
 
 int res_trk_open_secure_session()
