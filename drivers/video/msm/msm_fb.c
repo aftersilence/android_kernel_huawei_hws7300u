@@ -1135,15 +1135,29 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 
 	fix->line_length = msm_fb_line_length(mfd->index, panel_info->xres,
 					      bpp);
+
+	/* Make sure all buffers can be addressed on a page boundary by an x
+	 * and y offset */
+
+	remainder = (fix->line_length * panel_info->yres) & (PAGE_SIZE - 1);
+					/* PAGE_SIZE is a power of 2 */
+	if (!remainder)
+		remainder = PAGE_SIZE;
+	remainder_mode2 = (fix->line_length *
+				panel_info->mode2_yres) & (PAGE_SIZE - 1);
+	if (!remainder_mode2)
+		remainder_mode2 = PAGE_SIZE;
+
 	/* calculate smem_len based on max size of two supplied modes */
-	fix->smem_len = roundup(MAX(msm_fb_line_length(mfd->index,
-					       panel_info->xres,
-					       bpp) *
-			    panel_info->yres * mfd->fb_page,
-			    msm_fb_line_length(mfd->index,
+	fix->smem_len = MAX((msm_fb_line_length(mfd->index, panel_info->xres,
+					      bpp) *
+			    panel_info->yres + PAGE_SIZE -
+				remainder) * mfd->fb_page,
+			    (msm_fb_line_length(mfd->index,
 					       panel_info->mode2_xres,
 					       bpp) *
-			    panel_info->mode2_yres * mfd->fb_page), PAGE_SIZE);
+			    panel_info->mode2_yres + PAGE_SIZE -
+				remainder_mode2) * mfd->fb_page);
 
 
 	/* Make sure all buffers can be addressed on a page boundary by an x
@@ -1198,7 +1212,8 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	var->xres = panel_info->xres;
 	var->yres = panel_info->yres;
 	var->xres_virtual = panel_info->xres;
-	var->yres_virtual = panel_info->yres * mfd->fb_page;
+	var->yres_virtual = panel_info->yres * mfd->fb_page +
++		((PAGE_SIZE - remainder)/fix->line_length) * mfd->fb_page;
 	var->bits_per_pixel = bpp * 8;	/* FrameBuffer color depth */
 	if (mfd->dest == DISPLAY_LCD) {
 		var->reserved[4] = panel_info->lcd.refx100 / 100;
