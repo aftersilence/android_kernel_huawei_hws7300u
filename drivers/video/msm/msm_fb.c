@@ -192,6 +192,7 @@ static struct led_classdev backlight_led = {
 
 #define PANEL_NAME_MAX_LEN 30
 static struct msm_fb_platform_data *msm_fb_pdata;
+unsigned char hdmi_prim_display;
 static char prim_panel_name[PANEL_NAME_MAX_LEN];
 static char ext_panel_name[PANEL_NAME_MAX_LEN];
 module_param_string(prim_display, prim_panel_name, sizeof(prim_panel_name) , 0);
@@ -3452,11 +3453,10 @@ struct platform_device *msm_fb_add_device(struct platform_device *pdev)
 	 */
 	if (type == HDMI_PANEL || type == DTV_PANEL ||
 		type == TV_PANEL || type == WRITEBACK_PANEL) {
-#ifdef CONFIG_FB_MSM_HDMI_AS_PRIMARY
-		pdata->panel_info.fb_num = 2;
-#else
-		pdata->panel_info.fb_num = 1;
-#endif
+		if (hdmi_prim_display)
+			pdata->panel_info.fb_num = 2;
+		else
+			pdata->panel_info.fb_num = 1;
 	}
 	else
 		pdata->panel_info.fb_num = MSM_FB_NUM;
