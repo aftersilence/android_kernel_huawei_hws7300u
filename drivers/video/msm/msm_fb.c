@@ -84,6 +84,8 @@ static u32 msm_fb_pseudo_palette[16] = {
 	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff
 };
 
+static struct ion_client *iclient;
+
 u32 msm_fb_debug_enabled;
 /* Setting msm_fb_msg_level to 8 prints out ALL messages */
 u32 msm_fb_msg_level = 7;
@@ -311,6 +313,13 @@ static int msm_fb_probe(struct platform_device *pdev)
 		}
 		MSM_FB_DEBUG("msm_fb_probe:  phy_Addr = 0x%x virt = 0x%x\n",
 			     (int)fbram_phys, (int)fbram);
+
+		iclient = msm_ion_client_create(-1, pdev->name);
+		if (IS_ERR_OR_NULL(iclient)) {
+			pr_err("msm_ion_client_create() return"
+				" error, val %p\n", iclient);
+			iclient = NULL;
+		}
 
 		msm_fb_resource_initialized = 1;
 		return 0;
@@ -974,6 +983,9 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	int *id;
 	int fbram_offset;
 	int remainder, remainder_mode2;
+	static int subsys_id[2] = {MSM_SUBSYSTEM_DISPLAY,
+		MSM_SUBSYSTEM_ROTATOR};
+	unsigned int flags = MSM_SUBSYSTEM_MAP_IOVA;
 
 	/*
 	 * fb info initialization
@@ -1180,6 +1192,7 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 
 	mfd->var_xres = panel_info->xres;
 	mfd->var_yres = panel_info->yres;
+	mfd->var_frame_rate = panel_info->frame_rate;
 
 	var->pixclock = mfd->panel_info.clk_rate;
 	mfd->var_pixclock = var->pixclock;
@@ -1258,6 +1271,16 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 
 	fbi->screen_base = fbram;
 	fbi->fix.smem_start = (unsigned long)fbram_phys;
+
+	mfd->map_buffer = msm_subsystem_map_buffer(
+		fbi->fix.smem_start, fbi->fix.smem_len,
+		flags, subsys_id, 2);
+	if (mfd->map_buffer) {
+		pr_debug("%s(): buf 0x%lx, mfd->map_buffer->iova[0] 0x%lx\n"
+			"mfd->map_buffer->iova[1] 0x%lx", __func__,
+			fbi->fix.smem_start, mfd->map_buffer->iova[0],
+			mfd->map_buffer->iova[1]);
+	}
 
 	memset(fbi->screen_base, 0x0, fix->smem_len);
 
@@ -1697,6 +1720,27 @@ static int msm_fb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 	return 0;
 }
 
+int msm_fb_check_frame_rate(struct msm_fb_data_type *mfd
+						, struct fb_info *info)
+{
+	int panel_height, panel_width, var_frame_rate, fps_mod;
+	struct fb_var_screeninfo *var = &info->var;
+	fps_mod = 0;
+	if ((mfd->panel_info.type == DTV_PANEL) ||
+		(mfd->panel_info.type == HDMI_PANEL)) {
+		panel_height = var->yres + var->upper_margin +
+			var->vsync_len + var->lower_margin;
+		panel_width = var->xres + var->right_margin +
+			var->hsync_len + var->left_margin;
+		var_frame_rate = ((var->pixclock)/(panel_height * panel_width));
+		if (mfd->var_frame_rate != var_frame_rate) {
+			fps_mod = 1;
+			mfd->var_frame_rate = var_frame_rate;
+		}
+	}
+	return fps_mod;
+}
+
 static int msm_fb_set_par(struct fb_info *info)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
@@ -1738,7 +1782,8 @@ static int msm_fb_set_par(struct fb_info *info)
 		(mfd->hw_refresh && ((mfd->fb_imgType != old_imgType) ||
 				(mfd->var_pixclock != var->pixclock) ||
 				(mfd->var_xres != var->xres) ||
-				(mfd->var_yres != var->yres)))) {
+				(mfd->var_yres != var->yres) ||
+				(msm_fb_check_frame_rate(mfd, info))))) {
 		mfd->var_xres = var->xres;
 		mfd->var_yres = var->yres;
 		mfd->var_pixclock = var->pixclock;
@@ -2915,7 +2960,6 @@ static int msmfb_mixer_info(struct fb_info *info, unsigned long *argp)
 
 DEFINE_SEMAPHORE(msm_fb_ioctl_ppp_sem);
 DEFINE_MUTEX(msm_fb_ioctl_lut_sem);
-DEFINE_MUTEX(msm_fb_ioctl_hist_sem);
 
 /* Set color conversion matrix from user space */
 
@@ -3041,7 +3085,9 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 	void __user *argp = (void __user *)arg;
 	struct fb_cursor cursor;
 	struct fb_cmap cmap;
-	struct mdp_histogram hist;
+	struct mdp_histogram_data hist;
+	struct mdp_histogram_start_req hist_req;
+	uint32_t block;
 #ifndef CONFIG_FB_MSM_MDP40
 	struct mdp_ccs ccs_matrix;
 #else
@@ -3262,9 +3308,7 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 		if (ret)
 			return ret;
 
-		mutex_lock(&msm_fb_ioctl_hist_sem);
 		ret = mfd->do_histogram(info, &hist);
-		mutex_unlock(&msm_fb_ioctl_hist_sem);
 		break;
 
 	case MSMFB_HISTOGRAM_START:
@@ -3273,13 +3317,23 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 
 		if (!mfd->do_histogram)
 			return -ENODEV;
-		ret = mdp_start_histogram(info);
+
+		ret = copy_from_user(&hist_req, argp, sizeof(hist_req));
+		if (ret)
+			return ret;
+
+		ret = mdp_histogram_start(&hist_req);
 		break;
 
 	case MSMFB_HISTOGRAM_STOP:
 		if (!mfd->do_histogram)
 			return -ENODEV;
-		ret = mdp_stop_histogram(info);
+
+		ret = copy_from_user(&block, argp, sizeof(int));
+		if (ret)
+			return ret;
+
+		ret = mdp_histogram_stop(info, block);
 		break;
 
 
@@ -3476,11 +3530,7 @@ struct platform_device *msm_fb_add_device(struct platform_device *pdev)
 	mfd->fb_page = fb_num;
 	mfd->index = fbi_list_index;
 	mfd->mdp_fb_page_protection = MDP_FB_PAGE_PROTECTION_WRITECOMBINE;
-#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
-	mfd->iclient = msm_ion_client_create(-1, pdev->name);
-#else
-	mfd->iclient = NULL;
-#endif
+	mfd->iclient = iclient;
 	/* link to the latest pdev */
 	mfd->pdev = this_dev;
 
@@ -3503,19 +3553,32 @@ struct platform_device *msm_fb_add_device(struct platform_device *pdev)
 }
 EXPORT_SYMBOL(msm_fb_add_device);
 
-int get_fb_phys_info(unsigned long *start, unsigned long *len, int fb_num)
+int get_fb_phys_info(unsigned long *start, unsigned long *len, int fb_num,
+	int subsys_id)
 {
 	struct fb_info *info;
+	struct msm_fb_data_type *mfd;
 
-	if (fb_num > MAX_FBI_LIST)
+	if (fb_num > MAX_FBI_LIST ||
+		(subsys_id != DISPLAY_SUBSYSTEM_ID &&
+		 subsys_id != ROTATOR_SUBSYSTEM_ID)) {
+		pr_err("%s(): Invalid parameters\n", __func__);
 		return -1;
+	}
 
 	info = fbi_list[fb_num];
-	if (!info)
+	if (!info) {
+		pr_err("%s(): info is NULL\n", __func__);
 		return -1;
+	}
 
-	*start = info->fix.smem_start;
+	mfd = (struct msm_fb_data_type *)info->par;
+	if (mfd->map_buffer)
+		*start = mfd->map_buffer->iova[subsys_id];
+	else
+		*start = info->fix.smem_start;
 	*len = info->fix.smem_len;
+
 	return 0;
 }
 EXPORT_SYMBOL(get_fb_phys_info);

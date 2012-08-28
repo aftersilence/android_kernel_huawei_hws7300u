@@ -2444,7 +2444,7 @@ static int hdcp_authentication_part1(void)
 			[7:0] LINK0_AKSV_1 */
 		/* LINK0_AINFO	= 0x2 FEATURE 1.1 on.
 		 *		= 0x0 FEATURE 1.1 off*/
-		HDMI_OUTP(0x0148, 0x2 << 8);
+		HDMI_OUTP(0x0148, 0x0);
 
 		/* 0x012C HDCP_ENTROPY_CTRL0
 			[31:0] BITS_OF_INFLUENCE_0 */
@@ -3976,6 +3976,8 @@ static void hdmi_msm_turn_on(void)
 	/* HDMI_USEC_REFTIMER[0x0208] */
 	HDMI_OUTP(0x0208, 0x0001001B);
 
+	hdmi_msm_set_mode(TRUE);
+
 	hdmi_msm_video_setup(external_common_state->video_resolution);
 	if (!hdmi_msm_is_dvi_mode())
 		hdmi_msm_audio_setup();
@@ -3990,8 +3992,6 @@ static void hdmi_msm_turn_on(void)
 	/* Toggle HPD circuit to trigger HPD sense */
 	HDMI_OUTP(0x0258, ~(1 << 28) & hpd_ctrl);
 	HDMI_OUTP(0x0258, (1 << 28) | hpd_ctrl);
-
-	hdmi_msm_set_mode(TRUE);
 
 	/* Setup HPD IRQ */
 	HDMI_OUTP(0x0254, 4 | (external_common_state->hpd_state ? 0 : 2));
@@ -4396,7 +4396,6 @@ static int __devinit hdmi_msm_probe(struct platform_device *pdev)
 	hdmi_msm_state->hdcp_timer.data = (uint32)NULL;
 
 	hdmi_msm_state->hdcp_timer.expires = 0xffffffffL;
-	add_timer(&hdmi_msm_state->hdcp_timer);
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL_HDCP_SUPPORT */
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL_CEC_SUPPORT
