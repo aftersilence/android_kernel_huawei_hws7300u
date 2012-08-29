@@ -33,6 +33,7 @@ struct venc_inst {
 			struct mem_region *mregion);
 	u32 width;
 	u32 height;
+	int secure;
 };
 
 struct venc {
@@ -190,7 +191,7 @@ static void venc_cb(u32 event, u32 status, void *info, u32 size, void *handle,
 		}
 
 		vbuf->v4l2_buf.timestamp =
-			ns_to_timeval(frame_data->time_stamp);
+			ns_to_timeval(frame_data->time_stamp * NSEC_PER_USEC);
 
 		WFD_MSG_DBG("bytes used %d, ts: %d.%d, frame type is %d\n",
 				frame_data->data_len,
@@ -232,6 +233,7 @@ static long venc_open(struct v4l2_subdev *sd, void *arg)
 	struct venc_inst *inst;
 	struct video_client_ctx *client_ctx;
 	struct venc_msg_ops *vmops  =  arg;
+	int flags = 0;
 	mutex_lock(&venc_p.lock);
 	client_index = venc_get_empty_client_index();
 	if (client_index < 0) {
@@ -250,7 +252,11 @@ static long venc_open(struct v4l2_subdev *sd, void *arg)
 	inst->op_buffer_done = vmops->op_buffer_done;
 	inst->ip_buffer_done = vmops->ip_buffer_done;
 	inst->cbdata = vmops->cbdata;
-
+	inst->secure = vmops->secure;
+	if (vmops->secure) {
+		WFD_MSG_ERR("OPENING SECURE SESSION\n");
+		flags |= VCD_CP_SESSION;
+	}
 	if (vcd_get_ion_status()) {
 		client_ctx->user_ion_client = vcd_get_ion_client();
 		if (!client_ctx->user_ion_client) {
@@ -260,9 +266,10 @@ static long venc_open(struct v4l2_subdev *sd, void *arg)
 	}
 
 	rc = vcd_open(venc_p.device_handle, false, venc_cb,
-					inst);
+				inst, flags);
 	if (rc) {
 		WFD_MSG_ERR("vcd_open failed, rc = %d\n", rc);
+		rc = -ENODEV;
 		goto no_free_client;
 	}
 	wait_for_completion(&client_ctx->event);
@@ -988,6 +995,7 @@ static long venc_set_framerate(struct v4l2_subdev *sd,
 	struct v4l2_fract *frate = arg;
 	struct vcd_property_hdr vcd_property_hdr;
 	struct vcd_property_frame_rate vcd_frame_rate;
+	struct vcd_property_vop_timing_constant_delta vcd_delta;
 	int rc;
 	vcd_property_hdr.prop_id = VCD_I_FRAME_RATE;
 	vcd_property_hdr.sz =
@@ -997,8 +1005,25 @@ static long venc_set_framerate(struct v4l2_subdev *sd,
 	vcd_frame_rate.fps_numerator = frate->denominator;
 	rc = vcd_set_property(client_ctx->vcd_handle,
 					&vcd_property_hdr, &vcd_frame_rate);
-	if (rc)
+	if (rc) {
 		WFD_MSG_ERR("Failed to set frame rate, rc = %d\n", rc);
+		goto set_framerate_fail;
+	}
+
+	vcd_property_hdr.prop_id = VCD_I_VOP_TIMING_CONSTANT_DELTA;
+	vcd_property_hdr.sz = sizeof(vcd_delta);
+
+	vcd_delta.constant_delta = (frate->numerator * USEC_PER_SEC) /
+					frate->denominator;
+	rc = vcd_set_property(client_ctx->vcd_handle,
+					&vcd_property_hdr, &vcd_delta);
+
+	if (rc) {
+		WFD_MSG_ERR("Failed to set frame delta, rc = %d", rc);
+		goto set_framerate_fail;
+	}
+
+set_framerate_fail:
 	return rc;
 }
 
@@ -1370,12 +1395,16 @@ static long venc_encode_frame(struct v4l2_subdev *sd, void *arg)
 	struct venc_buf_info *venc_buf = arg;
 	struct mem_region *mregion = venc_buf->mregion;
 	struct vcd_frame_data vcd_input_buffer = {0};
+	int64_t ts = 0;
+
+	ts = venc_buf->timestamp;
+	do_div(ts, NSEC_PER_USEC);
 
 	vcd_input_buffer.virtual = mregion->kvaddr;
 	vcd_input_buffer.frm_clnt_data = (u32)mregion;
 	vcd_input_buffer.ip_frm_tag = (u32)mregion;
 	vcd_input_buffer.data_len = mregion->size;
-	vcd_input_buffer.time_stamp = venc_buf->timestamp;
+	vcd_input_buffer.time_stamp = ts;
 	vcd_input_buffer.offset = 0;
 
 	rc = vcd_encode_frame(client_ctx->vcd_handle,
@@ -1396,6 +1425,7 @@ static long venc_alloc_recon_buffers(struct v4l2_subdev *sd, void *arg)
 	struct vcd_property_enc_recon_buffer *ctrl = NULL;
 	unsigned long phy_addr;
 	int i = 0;
+	int flags = 0;
 	u32 len;
 	control.width = inst->width;
 	control.height = inst->height;
@@ -1408,7 +1438,9 @@ static long venc_alloc_recon_buffers(struct v4l2_subdev *sd, void *arg)
 		WFD_MSG_ERR("Failed to get recon buf size\n");
 		goto err;
 	}
-
+	flags = (0x1<<ION_CP_MM_HEAP_ID);
+	if (inst->secure)
+		flags |= ION_SECURE;
 	if (vcd_get_ion_status()) {
 		for (i = 0; i < 4; ++i) {
 			ctrl = &client_ctx->recon_buffer[i];
@@ -1418,7 +1450,7 @@ static long venc_alloc_recon_buffers(struct v4l2_subdev *sd, void *arg)
 			ctrl->user_virtual_addr = (void *)i;
 			client_ctx->recon_buffer_ion_handle[i]
 				= ion_alloc(client_ctx->user_ion_client,
-			control.size, SZ_8K, (0x1<<ION_CP_MM_HEAP_ID));
+			control.size, SZ_8K, flags);
 			ctrl->kernel_virtual_addr = ion_map_kernel(
 				client_ctx->user_ion_client,
 				client_ctx->recon_buffer_ion_handle[i],	0);
