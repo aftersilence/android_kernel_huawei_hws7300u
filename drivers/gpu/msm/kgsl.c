@@ -1174,7 +1174,7 @@ kgsl_ioctl_sharedmem_from_vmalloc(struct kgsl_device_private *dev_priv,
 
 	result = remap_vmalloc_range(vma, (void *) entry->memdesc.hostptr, 0);
 	if (result) {
-		KGSL_CORE_ERR("kgsl_sharedmem_map_vma failed: %d\n", result);
+		KGSL_CORE_ERR("remap_vmalloc_range failed: %d\n", result);
 		goto error_free_vmalloc;
 	}
 

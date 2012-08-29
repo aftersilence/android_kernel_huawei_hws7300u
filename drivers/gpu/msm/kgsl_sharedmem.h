@@ -28,16 +28,19 @@ struct kgsl_process_private;
 /** Set if the memdesc describes cached memory */
 #define KGSL_MEMFLAGS_CACHED    0x00000001
 
+struct kgsl_memdesc_ops {
+	int (*vmflags)(struct kgsl_memdesc *);
+	int (*vmfault)(struct kgsl_memdesc *, struct vm_area_struct *,
+		       struct vm_fault *);
+	void (*free)(struct kgsl_memdesc *memdesc);
+};
+
 extern struct kgsl_memdesc_ops kgsl_vmalloc_ops;
 
 int kgsl_sharedmem_vmalloc(struct kgsl_memdesc *memdesc,
 			   struct kgsl_pagetable *pagetable, size_t size);
 
 int kgsl_sharedmem_vmalloc_user(struct kgsl_memdesc *memdesc,
-				struct kgsl_pagetable *pagetable,
-				size_t size, int flags);
-
-int kgsl_sharedmem_page_alloc_user(struct kgsl_memdesc *memdesc,
 				struct kgsl_pagetable *pagetable,
 				size_t size, int flags);
 
