@@ -19,6 +19,8 @@
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MAP_TABLE_SZ 64
+#define VCD_ENC_MAX_OUTBFRS_PER_FRAME 8
+#define MAX_DEC_TIME 33
 
 struct vcd_msm_map_buffer {
 	phys_addr_t phy_addr;
@@ -183,6 +185,42 @@ u8 *vcd_pmem_get_physical(struct video_client_ctx *client_ctx,
 		VCD_MSG_ERROR("Couldn't get physical address");
 
 		return NULL;
+	}
+
+}
+
+u32 vcd_get_ion_flag(struct video_client_ctx *client_ctx,
+			  unsigned long kernel_vaddr,
+			struct ion_handle **buff_ion_handle)
+{
+	unsigned long phy_addr, user_vaddr;
+	int pmem_fd;
+	struct file *file;
+	s32 buffer_index = -1;
+	u32 ion_flag = 0;
+	struct ion_handle *buff_handle = NULL;
+
+	if (vidc_lookup_addr_table(client_ctx, BUFFER_TYPE_INPUT,
+					  false, &user_vaddr, &kernel_vaddr,
+					  &phy_addr, &pmem_fd, &file,
+					  &buffer_index)) {
+
+		ion_flag = vidc_get_fd_info(client_ctx, BUFFER_TYPE_INPUT,
+				pmem_fd, kernel_vaddr, buffer_index,
+				&buff_handle);
+		*buff_ion_handle = buff_handle;
+		return ion_flag;
+	} else if (vidc_lookup_addr_table(client_ctx, BUFFER_TYPE_OUTPUT,
+		false, &user_vaddr, &kernel_vaddr, &phy_addr, &pmem_fd, &file,
+		&buffer_index)) {
+		ion_flag = vidc_get_fd_info(client_ctx, BUFFER_TYPE_OUTPUT,
+				pmem_fd, kernel_vaddr, buffer_index,
+				&buff_handle);
+		*buff_ion_handle = buff_handle;
+		return ion_flag;
+	} else {
+		VCD_MSG_ERROR("Couldn't get ion flag");
+		return 0;
 	}
 
 }
@@ -522,6 +560,8 @@ u32 vcd_set_buffer_internal(
 {
 	struct vcd_buffer_entry *buf_entry;
 	u8 *physical;
+	u32 ion_flag = 0;
+	struct ion_handle *buff_handle = NULL;
 
 	buf_entry = vcd_find_buffer_pool_entry(buf_pool, buffer);
 	if (buf_entry) {
@@ -533,6 +573,9 @@ u32 vcd_set_buffer_internal(
 	physical = (u8 *) vcd_pmem_get_physical(
 		cctxt->client_data, (unsigned long)buffer);
 
+	ion_flag = vcd_get_ion_flag(cctxt->client_data,
+				(unsigned long)buffer,
+				&buff_handle);
 	if (!physical) {
 		VCD_MSG_ERROR("Couldn't get physical address");
 		return VCD_ERR_BAD_POINTER;
@@ -547,7 +590,6 @@ u32 vcd_set_buffer_internal(
 		VCD_MSG_ERROR("Can't allocate buffer pool is full");
 		return VCD_ERR_FAIL;
 	}
-
 	buf_entry->virtual = buffer;
 	buf_entry->physical = physical;
 	buf_entry->sz = buf_size;
@@ -556,6 +598,8 @@ u32 vcd_set_buffer_internal(
 
 	buf_entry->frame.virtual = buf_entry->virtual;
 	buf_entry->frame.physical = buf_entry->physical;
+	buf_entry->frame.ion_flag = ion_flag;
+	buf_entry->frame.buff_ion_handle = buff_handle;
 
 	buf_pool->validated++;
 
@@ -667,7 +711,8 @@ u32 vcd_free_one_buffer_internal(
 		return VCD_ERR_ILLEGAL_PARM;
 	}
 	if (buf_entry->in_use) {
-		VCD_MSG_ERROR("\n Buffer is in use and is not flushed");
+		VCD_MSG_ERROR("Buffer is in use and is not flushed: %p, %d\n",
+			buf_entry, buf_entry->in_use);
 		return VCD_ERR_ILLEGAL_OP;
 	}
 
@@ -966,6 +1011,7 @@ u32 vcd_flush_buffers(struct vcd_clnt_ctxt *cctxt, u32 mode)
 {
 	u32 rc = VCD_S_SUCCESS;
 	struct vcd_buffer_entry *buf_entry;
+	struct vcd_buffer_entry *orig_frame = NULL;
 
 	VCD_MSG_LOW("vcd_flush_buffers:");
 
@@ -989,9 +1035,19 @@ u32 vcd_flush_buffers(struct vcd_clnt_ctxt *cctxt, u32 mode)
 							 vcd_frame_data),
 						cctxt,
 						cctxt->client_data);
+				orig_frame = vcd_find_buffer_pool_entry(
+						&cctxt->in_buf_pool,
+						buf_entry->virtual);
 				}
 
-			buf_entry->in_use = false;
+			if (orig_frame) {
+				orig_frame->in_use--;
+				if (orig_frame != buf_entry)
+					kfree(buf_entry);
+			} else {
+				buf_entry->in_use = false;
+				VCD_MSG_ERROR("Original frame not found in buffer pool\n");
+			}
 			VCD_BUFFERPOOL_INUSE_DECREMENT(
 				cctxt->in_buf_pool.in_use);
 			buf_entry = NULL;
@@ -1415,6 +1471,8 @@ u32 vcd_submit_frame(struct vcd_dev_ctxt *dev_ctxt,
 	struct vcd_buffer_entry *op_buf_entry = NULL;
 	u32 rc = VCD_S_SUCCESS;
 	u32 evcode = 0;
+	u32 perf_level = 0;
+	int decodeTime = 0;
 	struct ddl_frame_data_tag ddl_ip_frm;
 	struct ddl_frame_data_tag ddl_op_frm;
 
@@ -1430,6 +1488,16 @@ u32 vcd_submit_frame(struct vcd_dev_ctxt *dev_ctxt,
 	memset(&ddl_ip_frm, 0, sizeof(ddl_ip_frm));
 	memset(&ddl_op_frm, 0, sizeof(ddl_op_frm));
 	if (cctxt->decoding) {
+		decodeTime = ddl_get_core_decode_proc_time(cctxt->ddl_handle);
+		if (decodeTime > MAX_DEC_TIME) {
+			if (res_trk_get_curr_perf_level(&perf_level)) {
+				vcd_update_decoder_perf_level(dev_ctxt,
+				   res_trk_estimate_perf_level(perf_level));
+				ddl_reset_avg_dec_time(cctxt->ddl_handle);
+			} else
+				VCD_MSG_ERROR("%s(): retrieve curr_perf_level"
+						"returned FALSE\n", __func__);
+		}
 		evcode = CLIENT_STATE_EVENT_NUMBER(decode_frame);
 		ddl_ip_frm.vcd_frm = *ip_frm_entry;
 		rc = ddl_decode_frame(cctxt->ddl_handle, &ddl_ip_frm,

@@ -246,13 +246,11 @@ u32 ddl_encode_start(u32 *ddl_handle, void *client_data)
 	void *ptr;
 	u32 status = VCD_S_SUCCESS;
 	DDL_MSG_HIGH("ddl_encode_start");
-	if (vidc_msg_timing) {
-		if (first_time < 2) {
-			ddl_reset_core_time_variables(ENC_OP_TIME);
-			first_time++;
-		 }
-		ddl_set_core_start_time(__func__, ENC_OP_TIME);
-	}
+	if (first_time < 2) {
+		ddl_reset_core_time_variables(ENC_OP_TIME);
+		first_time++;
+	 }
+	ddl_set_core_start_time(__func__, ENC_OP_TIME);
 	ddl_context = ddl_get_context();
 	if (!DDL_IS_INITIALIZED(ddl_context)) {
 		DDL_MSG_ERROR("ddl_enc_start:Not_inited");
@@ -305,10 +303,8 @@ u32 ddl_decode_start(u32 *ddl_handle, struct vcd_sequence_hdr *header,
 	u32 status = VCD_S_SUCCESS;
 
 	DDL_MSG_HIGH("ddl_decode_start");
-	if (vidc_msg_timing) {
-		ddl_reset_core_time_variables(DEC_OP_TIME);
-		ddl_reset_core_time_variables(DEC_IP_TIME);
-	}
+	ddl_reset_core_time_variables(DEC_OP_TIME);
+	ddl_reset_core_time_variables(DEC_IP_TIME);
 	ddl_context = ddl_get_context();
 	if (!DDL_IS_INITIALIZED(ddl_context)) {
 		DDL_MSG_ERROR("ddl_dec_start:Not_inited");
@@ -443,8 +439,7 @@ u32 ddl_encode_frame(u32 *ddl_handle,
 	u32 vcd_status = VCD_S_SUCCESS;
 
 	DDL_MSG_HIGH("ddl_encode_frame");
-	if (vidc_msg_timing)
-		ddl_set_core_start_time(__func__, ENC_OP_TIME);
+	ddl_set_core_start_time(__func__, ENC_OP_TIME);
 	ddl_context = ddl_get_context();
 	if (!DDL_IS_INITIALIZED(ddl_context)) {
 		DDL_MSG_ERROR("ddl_enc_frame:Not_inited");
@@ -515,10 +510,8 @@ u32 ddl_decode_end(u32 *ddl_handle, void *client_data)
 	struct ddl_context *ddl_context;
 
 	DDL_MSG_HIGH("ddl_decode_end");
-	if (vidc_msg_timing) {
-		ddl_reset_core_time_variables(DEC_OP_TIME);
-		ddl_reset_core_time_variables(DEC_IP_TIME);
-	}
+	ddl_reset_core_time_variables(DEC_OP_TIME);
+	ddl_reset_core_time_variables(DEC_IP_TIME);
 	ddl_context = ddl_get_context();
 	if (!DDL_IS_INITIALIZED(ddl_context)) {
 		DDL_MSG_ERROR("ddl_dec_end:Not_inited");
@@ -552,8 +545,7 @@ u32 ddl_encode_end(u32 *ddl_handle, void *client_data)
 	struct ddl_context *ddl_context;
 
 	DDL_MSG_HIGH("ddl_encode_end");
-	if (vidc_msg_timing)
-		ddl_reset_core_time_variables(ENC_OP_TIME);
+	ddl_reset_core_time_variables(ENC_OP_TIME);
 	ddl_context = ddl_get_context();
 	if (!DDL_IS_INITIALIZED(ddl_context)) {
 		DDL_MSG_ERROR("ddl_enc_end:Not_inited");
