@@ -455,7 +455,7 @@ EXPORT_SYMBOL(kgsl_cache_range_op);
 static int
 _kgsl_sharedmem_vmalloc(struct kgsl_memdesc *memdesc,
 			struct kgsl_pagetable *pagetable,
-			void *ptr, size_t size, unsigned int protflags)
+			size_t size, unsigned int protflags)
 {
 	int order, ret = 0;
 	int sglen = PAGE_ALIGN(size) / PAGE_SIZE;
@@ -472,17 +472,23 @@ _kgsl_sharedmem_vmalloc(struct kgsl_memdesc *memdesc,
 		goto done;
 	}
 
+	kmemleak_not_leak(memdesc->sg);
+
 	memdesc->sglen = sglen;
 	sg_init_table(memdesc->sg, sglen);
 
-	for (i = 0; i < memdesc->sglen; i++, ptr += PAGE_SIZE) {
-		struct page *page = vmalloc_to_page(ptr);
+	for (i = 0; i < memdesc->sglen; i++) {
+		struct page *page = alloc_page(GFP_KERNEL | __GFP_ZERO |
+						__GFP_HIGHMEM);
 		if (!page) {
-			ret = -EINVAL;
+			ret = -ENOMEM;
+			memdesc->sglen = i;
 			goto done;
 		}
+		flush_dcache_page(page);
 		sg_set_page(&memdesc->sg[i], page, PAGE_SIZE, 0);
 	}
+
 	ret = kgsl_mmu_map(pagetable, memdesc, protflags);
 
 	if (ret)
@@ -507,17 +513,10 @@ int
 kgsl_sharedmem_vmalloc(struct kgsl_memdesc *memdesc,
 		       struct kgsl_pagetable *pagetable, size_t size)
 {
-	void *ptr;
-
+	int ret = 0;
 	BUG_ON(size == 0);
 
 	size = ALIGN(size, PAGE_SIZE * 2);
-	ptr = vmalloc(size);
-
-	if (ptr  == NULL) {
-		KGSL_CORE_ERR("vmalloc(%d) failed\n", size);
-		return -ENOMEM;
-	}
 
 	ret =  _kgsl_sharedmem_vmalloc(memdesc, pagetable, size,
 		GSL_PT_PAGE_RV | GSL_PT_PAGE_WV);
@@ -534,17 +533,9 @@ kgsl_sharedmem_vmalloc_user(struct kgsl_memdesc *memdesc,
 			    struct kgsl_pagetable *pagetable,
 			    size_t size, int flags)
 {
-	void *ptr;
 	unsigned int protflags;
 
 	BUG_ON(size == 0);
-	ptr = vmalloc_user(size);
-
-	if (ptr == NULL) {
-		KGSL_CORE_ERR("vmalloc_user(%d) failed: allocated=%d\n",
-			      size, kgsl_driver.stats.vmalloc);
-		return -ENOMEM;
-	}
 
 	protflags = GSL_PT_PAGE_RV;
 	if (!(flags & KGSL_MEMFLAGS_GPUREADONLY))

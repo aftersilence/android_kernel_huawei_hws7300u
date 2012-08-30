@@ -21,6 +21,7 @@
 #include <linux/mutex.h>
 #include <linux/cdev.h>
 #include <linux/regulator/consumer.h>
+#include <linux/mm.h>
 
 #define KGSL_NAME "kgsl"
 
@@ -102,8 +103,15 @@ struct kgsl_driver {
 extern struct kgsl_driver kgsl_driver;
 
 struct kgsl_pagetable;
-struct kgsl_memdesc_ops;
+struct kgsl_memdesc;
 
+struct kgsl_memdesc_ops {
+	int (*vmflags)(struct kgsl_memdesc *);
+	int (*vmfault)(struct kgsl_memdesc *, struct vm_area_struct *,
+		       struct vm_fault *);
+	void (*free)(struct kgsl_memdesc *memdesc);
+	int (*map_kernel_mem)(struct kgsl_memdesc *);
+};
 /* shared memory allocation */
 struct kgsl_memdesc {
 	struct kgsl_pagetable *pagetable;
