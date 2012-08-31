@@ -17,6 +17,8 @@
 #include <linux/dma-mapping.h>
 #include <linux/vmalloc.h>
 #include "kgsl_mmu.h"
+#include <linux/slab.h>
+#include <linux/kmemleak.h>
 
 struct kgsl_device;
 struct kgsl_process_private;
@@ -34,10 +36,6 @@ extern struct kgsl_memdesc_ops kgsl_page_alloc_ops;
 
 int kgsl_sharedmem_page_alloc(struct kgsl_memdesc *memdesc,
 			   struct kgsl_pagetable *pagetable, size_t size);
-
-int kgsl_sharedmem_page_alloc_user(struct kgsl_memdesc *memdesc,
-				struct kgsl_pagetable *pagetable,
-				size_t size, int flags);
 
 int kgsl_sharedmem_page_alloc_user(struct kgsl_memdesc *memdesc,
 				struct kgsl_pagetable *pagetable,
@@ -113,19 +111,20 @@ static inline void kgsl_sg_free(void *ptr, unsigned int sglen)
 	else
 		vfree(ptr);
 }
+
 static inline int
 memdesc_sg_phys(struct kgsl_memdesc *memdesc,
 		unsigned int physaddr, unsigned int size)
 {
-	struct page *page = phys_to_page(physaddr);
+	memdesc->sg = kgsl_sg_alloc(1);
 
-	memdesc->sg = vmalloc(sizeof(struct scatterlist) * 1);
-	if (memdesc->sg == NULL)
-		return -ENOMEM;
+	kmemleak_not_leak(memdesc->sg);
 
 	memdesc->sglen = 1;
 	sg_init_table(memdesc->sg, 1);
-	sg_set_page(&memdesc->sg[0], page, size, 0);
+	memdesc->sg[0].length = size;
+	memdesc->sg[0].offset = 0;
+	memdesc->sg[0].dma_address = physaddr;
 	return 0;
 }
 

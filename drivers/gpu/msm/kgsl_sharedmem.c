@@ -746,7 +746,7 @@ void kgsl_sharedmem_free(struct kgsl_memdesc *memdesc)
 	if (memdesc->ops && memdesc->ops->free)
 		memdesc->ops->free(memdesc);
 
-	vfree(memdesc->sg);
+	kgsl_sg_free(memdesc->sg, memdesc->sglen);
 
 	memset(memdesc, 0, sizeof(*memdesc));
 }
