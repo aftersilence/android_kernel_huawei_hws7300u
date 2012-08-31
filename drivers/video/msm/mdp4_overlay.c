@@ -1534,8 +1534,6 @@ static void mdp4_mixer_stage_commit(int mixer)
 			pipe_cnt++;
 
 			mdp4_mixer_blend_setup(pipe);
-			if (i == mixer && pipe->pipe_num <= OVERLAY_PIPE_RGB2)
-				flush_bits |= (1 << (2 + pipe->pipe_num));
 		}
 	}
 
@@ -1774,12 +1772,14 @@ void mdp4_overlay_reg_flush(struct mdp4_overlay_pipe *pipe, int all)
         struct mdp4_overlay_pipe *bg_pipe;
         uint32 bits = 0;
 
-	if (pipe->mixer_num == MDP4_MIXER1)
-		bits |= 0x02;
-	else
-		bits |= 0x01;
+	if (all) {
+		if (pipe->mixer_num == MDP4_MIXER1)
+			bits |= 0x02;
+		else
+			bits |= 0x01;
+	}
 
-	if (all && pipe->pipe_num <= OVERLAY_PIPE_RGB2)
+	if (pipe->pipe_num <= OVERLAY_PIPE_RGB2)
 		bits |= 1 << (2 + pipe->pipe_num);
         if (pipe->is_fg && pipe->alpha == 0xFF) {
 		bg_pipe = mdp4_overlay_stage_pipe(pipe->mixer_num,
@@ -2299,7 +2299,7 @@ static uint32 mdp4_overlay_get_perf_level(struct mdp_overlay *req,
 	if (mdp4_extn_disp)
 		return OVERLAY_PERF_LEVEL1;
 
-	if (req->flags & MDP_DEINTERLACE)
+	if (req->flags & (MDP_DEINTERLACE | MDP_BACKEND_COMPOSITION))
 		return OVERLAY_PERF_LEVEL1;
 
 	for (i = 0, cnt = 0; i < OVERLAY_PIPE_MAX; i++) {
@@ -2924,15 +2924,19 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 		/* primary interface */
 		ctrl->mixer0_played++;
 		if (ctrl->panel_mode & MDP4_PANEL_LCDC) {
-			if (!mfd->use_ov0_blt)
-				mdp4_overlay_update_blt_mode(mfd);
+                mdp4_overlay_reg_flush(pipe, 0);
 			mdp4_overlay_lcdc_vsync_push(mfd, pipe);
+                        if (!mfd->use_ov0_blt &&
+					!(pipe->flags & MDP_OV_PLAY_NOWAIT))
+				mdp4_overlay_update_blt_mode(mfd);
 		}
 #ifdef CONFIG_FB_MSM_MIPI_DSI
 		else if (ctrl->panel_mode & MDP4_PANEL_DSI_VIDEO) {
-			if (!mfd->use_ov0_blt)
-				mdp4_overlay_update_blt_mode(mfd);
+                        mdp4_overlay_reg_flush(pipe, 0);
 			mdp4_overlay_dsi_video_vsync_push(mfd, pipe);
+                        if (!mfd->use_ov0_blt &&
+					!(pipe->flags & MDP_OV_PLAY_NOWAIT))
+				mdp4_overlay_update_blt_mode(mfd);
 		}
 #endif
 		else {

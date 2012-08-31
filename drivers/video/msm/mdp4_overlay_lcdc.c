@@ -569,6 +569,7 @@ void mdp4_lcdc_overlay(struct msm_fb_data_type *mfd)
 	}
 	mdp4_overlay_rgb_setup(pipe);
 	mdp4_mixer_stage_up(pipe);
+        mdp4_overlay_reg_flush(pipe, 0);
 	mdp4_overlay_lcdc_vsync_push(mfd, pipe);
         mdp4_iommu_unmap(pipe);
 	mutex_unlock(&mfd->dma->ov_mutex);
