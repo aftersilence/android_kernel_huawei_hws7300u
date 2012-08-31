@@ -42,7 +42,7 @@ import subprocess
 allowed_warnings = set([
     "return_address.c:62",
     "pmic8058-othc_s7pro.c:342",
-    "t1320.c:1156",
+    "t1320.c:1128",
     "nf_conntrack_core.c:1579",
     "nf_conntrack_core.c:1580",
     "nf_nat_standalone.c:287",
