@@ -1,6 +1,6 @@
 export KBUILD_BUILD_VERSION="3.0.38"
 export KBUILD_BUILD_USER="Mediapad EX"
-export CROSS_COMPILE="/home/zyr3x/android/kernel/android_prebuilt_toolchains/arm-eabi-4.4.3/bin/arm-eabi-"
+export CROSS_COMPILE="/home/zyr3x/android/prebuilt/linux-x86/toolchain/arm-eabi-4.4.3/bin/arm-eabi-"
 
 ROOTFS_PATH="/home/ubu/mediapad/ramdisk"
 ramdisk_dir=/home/ubu/mediapad/ramdisk/ramdisk.gz
@@ -15,7 +15,7 @@ let NB_CPU+=1
 
 CONFIG='mediapad_defconfig'
 
-#make ARCH=arm $CONFIG
+make ARCH=arm $CONFIG
 
 make ARCH=arm -j$NB_CPU CROSS_COMPILE=$CROSS_COMPILE
 
