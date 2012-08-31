@@ -89,6 +89,7 @@ allowed_warnings = set([
     "nf_nat_tftp.c:46",
     "sch_generic.c:678",
     "xt_log.h:50",
+    "dir.c:43",
  ])
 
 # Capture the name of the object file, can find it.
