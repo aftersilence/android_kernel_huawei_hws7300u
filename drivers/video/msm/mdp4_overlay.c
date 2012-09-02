@@ -391,14 +391,18 @@ void mdp4_overlay_dmap_cfg(struct msm_fb_data_type *mfd, int lcdc)
 		dma2_cfg_reg |= DMA_PACK_PATTERN_RGB;
 
 
-	if (mfd->panel_info.bpp == 18) {
+	if ((mfd->panel_info.type == MIPI_CMD_PANEL) ||
+		(mfd->panel_info.type == MIPI_VIDEO_PANEL)) {
+		dma2_cfg_reg |= DMA_DSTC0G_8BITS |	/* 888 24BPP */
+		    DMA_DSTC1B_8BITS | DMA_DSTC2R_8BITS;
+	} else if (mfd->panel_info.bpp == 18) {
 		dma2_cfg_reg |= DMA_DSTC0G_6BITS |	/* 666 18BPP */
 		    DMA_DSTC1B_6BITS | DMA_DSTC2R_6BITS;
 	} else if (mfd->panel_info.bpp == 16) {
 		dma2_cfg_reg |= DMA_DSTC0G_6BITS |	/* 565 16BPP */
 		    DMA_DSTC1B_5BITS | DMA_DSTC2R_5BITS;
 	} else {
-		dma2_cfg_reg |= DMA_DSTC0G_8BITS |	/* 888 16BPP */
+		dma2_cfg_reg |= DMA_DSTC0G_8BITS |	/* 888 24BPP */
 		    DMA_DSTC1B_8BITS | DMA_DSTC2R_8BITS;
 	}
 
@@ -1603,7 +1607,7 @@ void mdp4_mixer_blend_setup(struct mdp4_overlay_pipe *pipe)
 	unsigned char *overlay_base, *rgb_base;
 	uint32 c0, c1, c2, blend_op, constant_color = 0, rgb_src_format;
 	uint32 fg_color3_out, fg_alpha = 0, bg_alpha = 0;
-	int off, pnum;
+	int off, pnum, alpha_drop = 0;
 
 	if (pipe->mixer_stage == MDP4_MIXER_STAGE_BASE)
 		return;
@@ -1657,6 +1661,13 @@ void mdp4_mixer_blend_setup(struct mdp4_overlay_pipe *pipe)
 		}
 	}
 
+	/* alpha channel is lost on VG pipe when using QSEED or M/N */
+	if (pipe->pipe_type == OVERLAY_TYPE_VIDEO &&
+			((pipe->op_mode & MDP4_OP_SCALEY_EN) ||
+			(pipe->op_mode & MDP4_OP_SCALEX_EN)) &&
+			!(pipe->op_mode & MDP4_OP_SCALEY_PIXEL_RPT))
+			alpha_drop = 1;
+
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 
 	blend_op = (MDP4_BLEND_FG_ALPHA_FG_CONST |
@@ -1685,15 +1696,23 @@ void mdp4_mixer_blend_setup(struct mdp4_overlay_pipe *pipe)
 			outpdw(rgb_base + 0x0058, op_mode);
 			outpdw(rgb_base + 0x50, rgb_src_format);
 			outpdw(rgb_base + 0x1008, constant_color);
+                        outpdw(rgb_base + 0x0000, inpdw(rgb_base + 0x0008));
 		}
 	} else if (fg_alpha) {
-		blend_op = (MDP4_BLEND_BG_ALPHA_FG_PIXEL |
-			    MDP4_BLEND_BG_INV_ALPHA);
+		if (!alpha_drop) {
+			blend_op = MDP4_BLEND_BG_ALPHA_FG_PIXEL;
+			if (!(pipe->flags & MDP_BLEND_FG_PREMULT))
+				blend_op |= MDP4_BLEND_FG_ALPHA_FG_PIXEL;
+		} else
+			blend_op = MDP4_BLEND_BG_ALPHA_FG_CONST;
+
+		blend_op |= MDP4_BLEND_BG_INV_ALPHA;
 		fg_color3_out = 1; /* keep fg alpha */
 	} else if (bg_alpha) {
-		blend_op = (MDP4_BLEND_BG_ALPHA_BG_PIXEL |
-			    MDP4_BLEND_FG_ALPHA_BG_PIXEL |
+		blend_op = (MDP4_BLEND_FG_ALPHA_BG_PIXEL |
 			    MDP4_BLEND_FG_INV_ALPHA);
+                if (!(pipe->flags & MDP_BLEND_FG_PREMULT))
+		blend_op |= MDP4_BLEND_BG_ALPHA_BG_PIXEL;
 		fg_color3_out = 0; /* keep bg alpha */
 	}
 
