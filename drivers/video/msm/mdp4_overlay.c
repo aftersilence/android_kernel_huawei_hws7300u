@@ -956,7 +956,7 @@ int mdp4_overlay_format2pipe(struct mdp4_overlay_pipe *pipe)
 		} else if (pipe->src_format == MDP_Y_CBCR_H2V1) {
 			pipe->element1 = C1_B_Cb;       /* B */
                         pipe->element0 = C2_R_Cr;       /* R */
-			pipe->chroma_sample = M         DP4_CHROMA_H2V1;
+			pipe->chroma_sample = MDP4_CHROMA_H2V1;
 		} else if (pipe->src_format == MDP_Y_CBCR_H1V1) {
 			pipe->element1 = C1_B_Cb;       /* B */
                         pipe->element0 = C2_R_Cr;       /* R */
