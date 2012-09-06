@@ -3493,7 +3493,7 @@ unsigned char hdmi_is_primary;
 #endif  /* CONFIG_FB_MSM_OVERLAY1_WRITEBACK */
 
 #define MSM_PMEM_KERNEL_EBI1_SIZE  0x600000
-#define MSM_PMEM_ADSP_SIZE         0x3000000
+#define MSM_PMEM_ADSP_SIZE         0x4200000
 #define MSM_PMEM_AUDIO_SIZE        0x28B000
 
 #define MSM_SMI_BASE          0x38000000
@@ -3516,11 +3516,11 @@ unsigned char hdmi_is_primary;
 #else
 #define MSM_ION_WB_SIZE		0x600000 /* 6MB */
 #endif
-
+#define MSM_ION_QSECOM_SIZE	0x600000 /* (6MB) */
 #define MSM_ION_AUDIO_SIZE	MSM_PMEM_AUDIO_SIZE
 
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
-#define MSM_ION_HEAP_NUM	8
+#define MSM_ION_HEAP_NUM	9
 #define MSM_HDMI_PRIM_ION_SF_SIZE MSM_HDMI_PRIM_PMEM_SF_SIZE
 static unsigned msm_ion_sf_size = MSM_ION_SF_SIZE;
 #else
@@ -6865,6 +6865,18 @@ static struct ion_co_heap_pdata co_ion_pdata = {
 	.align = PAGE_SIZE,
 };
 #endif
+
+/**
+ * These heaps are listed in the order they will be allocated. Due to
+ * video hardware restrictions and content protection the FW heap has to
+ * be allocated adjacent (below) the MM heap and the MFC heap has to be
+ * allocated after the MM heap to ensure MFC heap is not more than 256MB
+ * away from the base address of the FW heap.
+ * However, the order of FW heap and MM heap doesn't matter since these
+ * two heaps are taken care of by separate code to ensure they are adjacent
+ * to each other.
+ * Don't swap the order unless you know what you are doing!
+ */
 static struct ion_platform_data ion_pdata = {
 	.nr = MSM_ION_HEAP_NUM,
 	.heaps = {
@@ -6904,7 +6916,7 @@ static struct ion_platform_data ion_pdata = {
 			.name	= ION_SF_HEAP_NAME,
 			.size	= MSM_ION_SF_SIZE,
 			.memory_type = ION_EBI_TYPE,
-			.extra_data = (void *) &co_ion_pdata,
+			.extra_data = (void *)&co_ion_pdata,
 		},
 		{
 			.id	= ION_CAMERA_HEAP_ID,
@@ -6921,6 +6933,14 @@ static struct ion_platform_data ion_pdata = {
 			.size	= MSM_ION_WB_SIZE,
 			.memory_type = ION_EBI_TYPE,
 			.extra_data = (void *) &cp_wb_ion_pdata,
+		},
+		{
+			.id	= ION_QSECOM_HEAP_ID,
+			.type	= ION_HEAP_TYPE_CARVEOUT,
+			.name	= ION_QSECOM_HEAP_NAME,
+			.size	= MSM_ION_QSECOM_SIZE,
+			.memory_type = ION_EBI_TYPE,
+			.extra_data = (void *) &co_ion_pdata,
 		},
 		{
 			.id	= ION_AUDIO_HEAP_ID,
