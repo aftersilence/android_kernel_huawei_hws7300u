@@ -90,6 +90,10 @@ allowed_warnings = set([
     "sch_generic.c:678",
     "xt_log.h:50",
     "dir.c:43",
+    "vx6953.c:3124",
+    "dma-mapping.c:238",
+    "dma-mapping.c:284",
+    "xt_log.h:50",
  ])
 
 # Capture the name of the object file, can find it.
