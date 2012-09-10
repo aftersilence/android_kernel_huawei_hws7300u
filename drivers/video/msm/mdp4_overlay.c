@@ -1244,9 +1244,6 @@ int mdp4_overlay_format2pipe(struct mdp4_overlay_pipe *pipe)
 			pipe->element2 = C2_R_Cr;   /* R */
 		}
 		pipe->bpp = 3;  /* 3 bpp */
-	case MDP_RGB_BORDERFILL:
-		pipe->alpha_enable = 0;
-		pipe->alpha = 0;
 		break;
 	default:
 		/* not likely */
