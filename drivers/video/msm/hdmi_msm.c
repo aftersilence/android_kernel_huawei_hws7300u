@@ -4154,7 +4154,32 @@ static int hdmi_msm_hpd_on(bool trigger_handler)
 
 	hdmi_msm_state->hpd_initialized = TRUE;
 
-	hdmi_msm_set_mode(TRUE);
+error3:
+	hdmi_msm_clk(0);
+error2:
+	hdmi_msm_state->pd->gpio_config(0);
+error1:
+	return rc;
+}
+
+static int hdmi_msm_power_ctrl(boolean enable)
+{
+	int rc = 0;
+
+	if (enable) {
+		/*
+		 * Enable HPD only if the UI option is on or if
+		 * HDMI is configured as the primary display
+		 */
+		if (hdmi_prim_display ||
+			external_common_state->hpd_feature_on) {
+			DEV_DBG("%s: Turning HPD ciruitry on\n", __func__);
+			rc = hdmi_msm_hpd_on(true);
+		}
+	} else {
+		DEV_DBG("%s: Turning HPD ciruitry off\n", __func__);
+		hdmi_msm_hpd_off();
+	}
 
 	return 0;
 }
