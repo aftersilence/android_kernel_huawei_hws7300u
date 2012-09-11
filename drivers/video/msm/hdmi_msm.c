@@ -4154,12 +4154,10 @@ static int hdmi_msm_hpd_on(bool trigger_handler)
 
 	hdmi_msm_state->hpd_initialized = TRUE;
 
-error3:
-	hdmi_msm_clk(0);
-error2:
-	hdmi_msm_state->pd->gpio_config(0);
-error1:
-	return rc;
+	hdmi_msm_set_mode(TRUE);
+
+	return 0;
+
 }
 
 static int hdmi_msm_power_ctrl(boolean enable)
@@ -4180,19 +4178,6 @@ static int hdmi_msm_power_ctrl(boolean enable)
 		DEV_DBG("%s: Turning HPD ciruitry off\n", __func__);
 		hdmi_msm_hpd_off();
 	}
-
-	return 0;
-}
-
-static int hdmi_msm_power_ctrl(boolean enable)
-{
-	if (!external_common_state->hpd_feature_on)
-		return 0;
-
-	if (enable)
-		hdmi_msm_hpd_on(true);
-	else
-		hdmi_msm_hpd_off();
 
 	return 0;
 }
