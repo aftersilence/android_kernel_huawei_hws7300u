@@ -382,8 +382,6 @@ void ddl_release_client_internal_buffers(struct ddl_client_context *ddl)
 		encoder->dynamic_prop_change = 0;
 		ddl_free_enc_hw_buffers(ddl);
 	}
-	ddl_pmem_free(&ddl->shared_mem[0]);
-	ddl_pmem_free(&ddl->shared_mem[1]);
 }
 
 u32 ddl_codec_type_transact(struct ddl_client_context *ddl,
@@ -740,14 +738,16 @@ u32 ddl_allocate_dec_hw_buffers(struct ddl_client_context *ddl)
 		if (!ptr)
 			status = VCD_ERR_ALLOC_FAIL;
 		else {
-			if (!res_trk_check_for_sec_session())
+			if (!res_trk_check_for_sec_session()) {
 				memset(dec_bufs->desc.align_virtual_addr,
 					0, buf_size.sz_desc);
-			msm_ion_do_cache_op(ddl_context->video_ion_client,
-						dec_bufs->desc.alloc_handle,
-						dec_bufs->desc.alloc_handle,
-						dec_bufs->desc.buffer_size,
-						ION_IOC_CLEAN_INV_CACHES);
+				msm_ion_do_cache_op(
+					ddl_context->video_ion_client,
+					dec_bufs->desc.alloc_handle,
+					dec_bufs->desc.virtual_base_addr,
+					dec_bufs->desc.buffer_size,
+					ION_IOC_CLEAN_INV_CACHES);
+			}
 		}
 	}
 	if (status)
@@ -974,9 +974,8 @@ u32 ddl_check_reconfig(struct ddl_client_context *ddl)
 	if (decoder->cont_mode) {
 		if ((decoder->actual_output_buf_req.sz <=
 			 decoder->client_output_buf_req.sz) &&
-			(decoder->actual_output_buf_req.actual_count +
-                        GRAPHICS_UNUSED_BUFFERS <=
-                        decoder->client_output_buf_req.actual_count)) {
+			(decoder->actual_output_buf_req.actual_count <=
+			 decoder->client_output_buf_req.actual_count)) {
 			need_reconfig = false;
 			if (decoder->min_dpb_num >
 				decoder->min_output_buf_req.min_count) {
@@ -1004,8 +1003,7 @@ u32 ddl_check_reconfig(struct ddl_client_context *ddl)
 			(decoder->frame_size.scan_lines ==
 			decoder->client_frame_size.scan_lines) &&
 			(decoder->frame_size.stride ==
-			decoder->client_frame_size.stride) &&
-			decoder->progressive_only)
+			decoder->client_frame_size.stride))
 				need_reconfig = false;
 	}
 	return need_reconfig;

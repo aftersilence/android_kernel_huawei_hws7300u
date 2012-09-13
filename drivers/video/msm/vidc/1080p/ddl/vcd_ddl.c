@@ -293,8 +293,12 @@ u32 ddl_encode_start(u32 *ddl_handle, void *client_data)
 		DDL_MSG_ERROR("ddl_enc_start:Seq_hdr_alloc_failed");
 		return VCD_ERR_ALLOC_FAIL;
 	}
-
-        if (encoder->slice_delivery_info.enable) {
+	msm_ion_do_cache_op(ddl_context->video_ion_client,
+				encoder->seq_header.alloc_handle,
+				encoder->seq_header.virtual_base_addr,
+				encoder->seq_header.buffer_size,
+				ION_IOC_CLEAN_INV_CACHES);
+	if (encoder->slice_delivery_info.enable) {
 		DDL_MSG_LOW("%s: slice mode allocate memory for struct\n",
 					__func__);
 		ptr = ddl_pmem_alloc(&encoder->batch_frame.slice_batch_in,
@@ -315,15 +319,7 @@ u32 ddl_encode_start(u32 *ddl_handle, void *client_data)
 			return VCD_ERR_ALLOC_FAIL;
 		}
 	}
-        if (!ddl_take_command_channel(ddl_context, ddl, client_data))
-
-	msm_ion_do_cache_op(ddl_context->video_ion_client,
-				encoder->seq_header.alloc_handle,
-				encoder->seq_header.virtual_base_addr,
-				encoder->seq_header.buffer_size,
-				ION_IOC_CLEAN_INV_CACHES);
 	if (!ddl_take_command_channel(ddl_context, ddl, client_data))
-
 		return VCD_ERR_BUSY;
 	ddl_vidc_channel_set(ddl);
 	return status;
@@ -472,9 +468,15 @@ u32 ddl_encode_frame(u32 *ddl_handle,
 	struct ddl_client_context *ddl =
 		(struct ddl_client_context *) ddl_handle;
 	struct ddl_context *ddl_context;
-        struct ddl_encoder_data *encoder =
+	struct ddl_encoder_data *encoder =
 		&ddl->codec_data.encoder;
-        u32 vcd_status = VCD_S_SUCCESS;
+	u32 vcd_status = VCD_S_SUCCESS;
+
+	struct vcd_transc *transc;
+	transc = (struct vcd_transc *)(ddl->client_data);
+	DDL_MSG_LOW("%s: transc = 0x%x, in_use = %u",
+				 __func__, (u32)ddl->client_data, transc->in_use);
+
 	if (encoder->slice_delivery_info.enable) {
 		return ddl_encode_frame_batch(ddl_handle,
 					input_frame,
@@ -483,7 +485,7 @@ u32 ddl_encode_frame(u32 *ddl_handle,
 					encoder->slice_delivery_info.num_slices,
 					client_data);
 	}
-	DDL_MSG_HIGH("ddl_encode_frame");
+
 	ddl_set_core_start_time(__func__, ENC_OP_TIME);
 	ddl_context = ddl_get_context();
 	if (!DDL_IS_INITIALIZED(ddl_context)) {

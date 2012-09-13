@@ -548,6 +548,10 @@ static u32 vcd_set_property_cmn
 		  cctxt->bframe = iperiod->b_frames;
 		  break;
 	   }
+	case VCD_REQ_PERF_LEVEL:
+		rc = vcd_req_perf_level(cctxt,
+			(struct vcd_property_perf_level *)prop_val);
+		break;
 	case VCD_I_VOP_TIMING_CONSTANT_DELTA:
 	   {
 		   struct vcd_property_vop_timing_constant_delta *delta =
@@ -562,10 +566,6 @@ static u32 vcd_set_property_cmn
 		   }
 		   break;
 	   }
-	case VCD_REQ_PERF_LEVEL:
-		rc = vcd_req_perf_level(cctxt,
-			(struct vcd_property_perf_level *)prop_val);
-		break;
 	default:
 		{
 			break;
@@ -1616,6 +1616,7 @@ void vcd_do_client_state_transition(struct vcd_clnt_ctxt *cctxt,
 	if (!cctxt || to_state >= VCD_CLIENT_STATE_MAX) {
 		VCD_MSG_ERROR("Bad parameters. cctxt=%p, to_state=%d",
 			      cctxt, to_state);
+        return ;
 	}
 
 	state_ctxt = &cctxt->clnt_state;

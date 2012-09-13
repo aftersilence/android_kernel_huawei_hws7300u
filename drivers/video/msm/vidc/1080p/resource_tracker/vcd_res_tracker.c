@@ -844,10 +844,6 @@ u32 res_trk_get_disable_dmx(void){
 	return resource_context.disable_dmx;
 }
 
-u32 res_trk_get_min_dpb_count(void){
-	return resource_context.vidc_platform_data->cont_mode_dpb_count;
-}
-
 void res_trk_set_mem_type(enum ddl_mem_area mem_type)
 {
 	resource_context.res_mem_type = mem_type;
@@ -992,18 +988,4 @@ u32 get_res_trk_perf_level(enum vcd_perf_level perf_level)
 		res_trk_perf_level = -EINVAL;
 	}
 	return res_trk_perf_level;
-}
-
-u32 res_trk_estimate_perf_level(u32 pn_perf_lvl)
-{
-	VCDRES_MSG_MED("%s(), req_perf_lvl = %d", __func__, pn_perf_lvl);
-	if ((pn_perf_lvl >= RESTRK_1080P_VGA_PERF_LEVEL) &&
-		(pn_perf_lvl < RESTRK_1080P_720P_PERF_LEVEL)) {
-		return RESTRK_1080P_720P_PERF_LEVEL;
-	} else if ((pn_perf_lvl >= RESTRK_1080P_720P_PERF_LEVEL) &&
-			(pn_perf_lvl < RESTRK_1080P_MAX_PERF_LEVEL)) {
-		return RESTRK_1080P_MAX_PERF_LEVEL;
-	} else {
-		return pn_perf_lvl;
-	}
 }
