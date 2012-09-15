@@ -1873,7 +1873,20 @@ u32 ddl_set_default_decoder_buffer_req(struct ddl_decoder_data *decoder,
 		output_buf_req = &decoder->actual_output_buf_req;
 		input_buf_req = &decoder->actual_input_buf_req;
 		min_dpb = decoder->min_dpb_num;
-		y_cb_cr_size = decoder->y_cb_cr_size;
+		if ((decoder->buf_format.buffer_format ==
+			VCD_BUFFER_FORMAT_TILE_4x2) &&
+			(frame_size->height < MDP_MIN_TILE_HEIGHT)) {
+			frame_size->height = MDP_MIN_TILE_HEIGHT;
+			ddl_calculate_stride(frame_size,
+				!decoder->progressive_only);
+			y_cb_cr_size = ddl_get_yuv_buffer_size(
+				frame_size,
+				&decoder->buf_format,
+				(!decoder->progressive_only),
+				decoder->hdr.decoding, NULL);
+			decoder->y_cb_cr_size = y_cb_cr_size;
+		} else
+			y_cb_cr_size = decoder->y_cb_cr_size;
 	}
 	memset(output_buf_req, 0,
 		sizeof(struct vcd_buffer_requirement));
