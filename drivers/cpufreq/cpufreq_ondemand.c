@@ -46,7 +46,6 @@
 #define MAX_FREQUENCY_UP_THRESHOLD		(100)
 #define MIN_FREQUENCY_DOWN_DIFFERENTIAL		(1)
 #define DBS_INPUT_EVENT_MIN_FREQ		(810000)
-#define DEFAULT_FREQ_BOOST_TIME			(2500000)
 #define DEFAULT_FREQ_BOOST_TIME			(500000)
 
 u64 freq_boosted_time;
@@ -1016,14 +1015,13 @@ bail_acq_sema_failed:
 }
 
 static unsigned int enable_dbs_input_event = 1;
-static void dbs_input_event(struct input_handle *handle, unsigned int type,
+/*static void dbs_input_event(struct input_handle *handle, unsigned int type,
 		unsigned int code, int value)
 {
 	int i;
 
 	if ((dbs_tuners_ins.powersave_bias == POWERSAVE_BIAS_MAXLEVEL) ||
 		(dbs_tuners_ins.powersave_bias == POWERSAVE_BIAS_MINLEVEL)) {
-		/* nothing to do */
 		return;
 	}
 
@@ -1036,9 +1034,9 @@ static void dbs_input_event(struct input_handle *handle, unsigned int type,
 	for_each_online_cpu(i) {
 		queue_work_on(i, input_wq, &per_cpu(dbs_refresh_work, i));
 	}
-}
+}*/
 
-static int input_dev_filter(const char *input_dev_name)
+/*static int input_dev_filter(const char *input_dev_name)
 {
 	if (strstr(input_dev_name, "touchscreen") || strstr(input_dev_name, "-keypad") ||
 		strstr(input_dev_name, "-nav") || strstr(input_dev_name, "-oj")) {
@@ -1046,15 +1044,14 @@ static int input_dev_filter(const char *input_dev_name)
 	} else {
 		return 1;
 	}
-}
+}*/
 
-static int dbs_input_connect(struct input_handler *handler,
+/*static int dbs_input_connect(struct input_handler *handler,
 		struct input_dev *dev, const struct input_device_id *id)
 {
 	struct input_handle *handle;
 	int error;
 
-	/* filter out those input_dev that we don't care */
 	if (input_dev_filter(dev->name))
 		return -ENODEV;
 
@@ -1080,27 +1077,27 @@ err1:
 err2:
 	kfree(handle);
 	return error;
-}
+}*/
 
-static void dbs_input_disconnect(struct input_handle *handle)
+/*static void dbs_input_disconnect(struct input_handle *handle)
 {
 	input_close_device(handle);
 	input_unregister_handle(handle);
 	kfree(handle);
-}
+}*/
 
 static const struct input_device_id dbs_ids[] = {
 	{ .driver_info = 1 },
 	{ },
 };
 
-static struct input_handler dbs_input_handler = {
+/*static struct input_handler dbs_input_handler = {
 	.event		= dbs_input_event,
 	.connect	= dbs_input_connect,
 	.disconnect	= dbs_input_disconnect,
 	.name		= "cpufreq_ond",
 	.id_table	= dbs_ids,
-};
+};*/
 
 static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 				   unsigned int event)
