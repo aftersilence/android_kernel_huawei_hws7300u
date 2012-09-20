@@ -29,11 +29,6 @@
 /* skip N 32-bit words to get to the next packet */
 #define CP_NOP			0x10
 
-/* indirect buffer dispatch.  prefetch parser uses this packet type to determine
-*  whether to pre-fetch the IB
-*/
-#define CP_INDIRECT_BUFFER	0x3f
-
 /* indirect buffer dispatch.  same as IB, but init is pipelined */
 #define CP_INDIRECT_BUFFER_PFD	0x37
 
@@ -120,6 +115,9 @@
 /* load constants from a location in memory */
 #define CP_LOAD_CONSTANT_CONTEXT 0x2e
 
+/* (A2x) sets binning configuration registers */
+#define CP_SET_BIN_DATA             0x2f
+
 /* selective invalidation of state pointers */
 #define CP_INVALIDATE_STATE	0x3b
 
@@ -205,14 +203,7 @@
 #define type0_pkt_size(pkt) ((((pkt) >> 16) & 0x3FFF) + 1)
 #define type0_pkt_offset(pkt) ((pkt) & 0x7FFF)
 
-/*
- * Check both for the type3 opcode and make sure that the reserved bits [1:7]
- * and 15 are 0
- */
-
-#define pkt_is_type3(pkt) \
-	((((pkt) & 0xC0000000) == CP_TYPE3_PKT) && \
-	 (((pkt) & 0x80FE) == 0))
+#define pkt_is_type3(pkt) (((pkt) & 0xC0000000) == CP_TYPE3_PKT)
 
 #define cp_type3_opcode(pkt) (((pkt) >> 8) & 0xFF)
 #define type3_pkt_size(pkt) ((((pkt) >> 16) & 0x3FFF) + 1)
