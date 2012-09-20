@@ -557,9 +557,7 @@ static ssize_t store_powersave_bias(struct kobject *a, struct attribute *b,
 
 				for_each_cpu(j, &cpus_timer_done) {
 					if (!dbs_info->cur_policy) {
-						printk(KERN_ERR
-						"%s Dbs policy is NULL\n",
-						 __func__);
+						pr_err("Dbs policy is NULL\n");
 						goto skip_this_cpu;
 					}
 					if (cpumask_test_cpu(j, dbs_info->
@@ -588,9 +586,7 @@ skip_this_cpu:
 
 			for_each_cpu(j, &cpus_timer_done) {
 				if (!dbs_info->cur_policy) {
-					printk(KERN_ERR
-					"%s Dbs policy is NULL\n",
-					 __func__);
+					pr_err("Dbs policy is NULL\n");
 					goto skip_this_cpu_bypass;
 				}
 				if (cpumask_test_cpu(j, dbs_info->
