@@ -96,19 +96,3 @@ config MSM_KGSL_DISABLE_SHADOW_WRITES
 	bool "Disable register shadow writes for context switches"
 	default n
 	depends on MSM_KGSL
-
-#
-config MSM_KGSL_VM_THRESHOLD
-       hex "Maximum amount of allocatable VM"
-       default 0x00000000
-       depends on MSM_KGSL
-       ---help---
-         Sets the maximum amount of VM used by the driver.  Android low memory killer invoked upon trigger.  Set to 0 to disable.
-
-config MSM_KGSL_VM_RSS_THRESHOLD
-       hex "RSS Threshold to include backgorund home applications"
-       default 0x00000000
-       depends on MSM_KGSL
-       ---help---
-         Configures a threshold of minimum process RSS size (in bytes) where background home processes will be included in vm memory killer
-#

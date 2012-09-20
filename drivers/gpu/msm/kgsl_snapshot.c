@@ -10,7 +10,6 @@
  * GNU General Public License for more details.
  */
 
-#include <linux/vmalloc.h>
 #include <linux/time.h>
 #include <linux/sysfs.h>
 #include <linux/utsname.h>
@@ -708,7 +707,7 @@ int kgsl_device_snapshot_init(struct kgsl_device *device)
 	int ret;
 
 	if (device->snapshot == NULL)
-		device->snapshot = vmalloc(KGSL_SNAPSHOT_MEMSIZE);
+		device->snapshot = kzalloc(KGSL_SNAPSHOT_MEMSIZE, GFP_KERNEL);
 
 	if (device->snapshot == NULL)
 		return -ENOMEM;
@@ -753,7 +752,7 @@ void kgsl_device_snapshot_close(struct kgsl_device *device)
 
 	kobject_put(&device->snapshot_kobj);
 
-	vfree(device->snapshot);
+	kfree(device->snapshot);
 
 	device->snapshot = NULL;
 	device->snapshot_maxsize = 0;

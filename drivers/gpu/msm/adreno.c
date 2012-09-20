@@ -276,7 +276,7 @@ static void adreno_iommu_setstate(struct kgsl_device *device,
 				KGSL_IOMMU_CONTEXT_USER))
 		goto done;
 
-	if (adreno_is_a225(adreno_dev))
+	if (cpu_is_msm8960())
 		cmds += adreno_add_change_mh_phys_limit_cmds(cmds, 0xFFFFF000,
 					device->mmu.setstate_memory.gpuaddr +
 					KGSL_IOMMU_SETSTATE_NOP_OFFSET);
@@ -371,7 +371,7 @@ static void adreno_iommu_setstate(struct kgsl_device *device,
 		}
 	}
 
-	if (adreno_is_a225(adreno_dev))
+	if (cpu_is_msm8960())
 		cmds += adreno_add_change_mh_phys_limit_cmds(cmds,
 			reg_map_desc[num_iommu_units - 1]->gpuaddr - PAGE_SIZE,
 			device->mmu.setstate_memory.gpuaddr +
@@ -590,7 +590,7 @@ a2xx_getchipid(struct kgsl_device *device)
 	* adreno 22x gpus are indicated by coreid 2,
 	* but REG_RBBM_PERIPHID1 always contains 0 for this field
 	*/
-	if (cpu_is_msm8960() || cpu_is_msm8x60() || cpu_is_msm8930())
+	if (cpu_is_msm8960() || cpu_is_msm8x60())
 		chipid = 2 << 24;
 	else
 		chipid = (coreid & 0xF) << 24;

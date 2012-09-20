@@ -40,9 +40,6 @@ container_of(a, struct kgsl_mem_entry_attribute, attr)
 	.show = _show, \
 }
 
-#if CONFIG_MSM_KGSL_VM_THRESHOLD > 0
-static void (*kgsl_shrink)(int largest, int rss_threshold) = NULL;
-#endif
 /*
  * A structure to hold the attributes for a particular memory type.
  * For each memory type in each process we store the current and maximum
@@ -360,6 +357,11 @@ static void kgsl_page_alloc_free(struct kgsl_memdesc *memdesc)
 		for_each_sg(memdesc->sg, sg, sglen, i)
 			__free_page(sg_page(sg));
 }
+static int kgsl_contiguous_vmflags(struct kgsl_memdesc *memdesc)
+{
+	return VM_RESERVED | VM_IO | VM_PFNMAP | VM_DONTEXPAND;
+}
+
 /*
  * kgsl_page_alloc_map_kernel - Map the memory in memdesc to kernel address
  * space
@@ -440,32 +442,6 @@ static void kgsl_coherent_free(struct kgsl_memdesc *memdesc)
 			  memdesc->hostptr, memdesc->physaddr);
 }
 
-static int kgsl_contiguous_vmflags(struct kgsl_memdesc *memdesc)
-{
-	return VM_RESERVED | VM_IO | VM_PFNMAP | VM_DONTEXPAND;
-}
-
-/*static int kgsl_vmalloc_vmfault(struct kgsl_memdesc *memdesc,
-				struct vm_area_struct *vma,
-				struct vm_fault *vmf)
-{
-	unsigned long offset;
-	struct page *page;
-	int i;
-
-	offset = (unsigned long) vmf->virtual_address - vma->vm_start;
-
-	i = offset >> PAGE_SHIFT;
-	page = sg_page(&memdesc->sg[i]);
-	if (page == NULL)
-		return VM_FAULT_SIGBUS;
-
-	get_page(page);
-
-	vmf->page = page;
-	return 0;
-}
-*/
 /* Global - also used by kgsl_drm.c */
 struct kgsl_memdesc_ops kgsl_page_alloc_ops = {
 	.free = kgsl_page_alloc_free,
@@ -480,7 +456,6 @@ static struct kgsl_memdesc_ops kgsl_ebimem_ops = {
 	.vmflags = kgsl_contiguous_vmflags,
 	.vmfault = kgsl_contiguous_vmfault,
 };
-
 
 static struct kgsl_memdesc_ops kgsl_coherent_ops = {
 	.free = kgsl_coherent_free,
@@ -506,7 +481,6 @@ void kgsl_cache_range_op(struct kgsl_memdesc *memdesc, int op)
 	outer_cache_range_op_sg(memdesc->sg, memdesc->sglen, op);
 }
 EXPORT_SYMBOL(kgsl_cache_range_op);
-
 
 static int
 _kgsl_sharedmem_page_alloc(struct kgsl_memdesc *memdesc,
@@ -908,19 +882,3 @@ kgsl_sharedmem_map_vma(struct vm_area_struct *vma,
 	return 0;
 }
 EXPORT_SYMBOL(kgsl_sharedmem_map_vma);
-
-#if CONFIG_MSM_KGSL_VM_THRESHOLD > 0
-void kgsl_register_shrinker(void (*shrink)(int largest, int rss_threshold))
-{
-   kgsl_shrink = shrink;
-}
-
-void kgsl_unregister_shrinker(void)
-{
-   kgsl_shrink = (void *)0;
-}
-
-EXPORT_SYMBOL(kgsl_register_shrinker);
-EXPORT_SYMBOL(kgsl_unregister_shrinker);
-#endif
-

@@ -652,6 +652,7 @@ void kgsl_early_suspend_driver(struct early_suspend *h)
 					struct kgsl_device, display_off);
 	KGSL_PWR_WARN(device, "early suspend start\n");
 	mutex_lock(&device->mutex);
+	device->pwrctrl.restore_slumber = true;
 	kgsl_pwrctrl_request_state(device, KGSL_STATE_SLUMBER);
 	kgsl_pwrctrl_sleep(device);
 	mutex_unlock(&device->mutex);
@@ -680,7 +681,7 @@ void kgsl_late_resume_driver(struct early_suspend *h)
 					struct kgsl_device, display_off);
 	KGSL_PWR_WARN(device, "late resume start\n");
 	mutex_lock(&device->mutex);
-	device->pwrctrl.restore_slumber = 0;
+	device->pwrctrl.restore_slumber = false;
 	if (device->pwrscale.policy == NULL)
 		kgsl_pwrctrl_pwrlevel_change(device, KGSL_PWRLEVEL_TURBO);
 	kgsl_pwrctrl_wake(device);
@@ -958,6 +959,40 @@ static long kgsl_ioctl_device_getproperty(struct kgsl_device_private *dev_priv,
 		if (copy_to_user(param->value, &version, sizeof(version)))
 			result = -EFAULT;
 
+		break;
+	}
+	case KGSL_PROP_GPU_RESET_STAT:
+	{
+		/* Return reset status of given context and clear it */
+		uint32_t id;
+		struct kgsl_context *context;
+
+		if (param->sizebytes != sizeof(unsigned int)) {
+			result = -EINVAL;
+			break;
+		}
+		/* We expect the value passed in to contain the context id */
+		if (copy_from_user(&id, param->value,
+			sizeof(unsigned int))) {
+			result = -EFAULT;
+			break;
+		}
+		context = kgsl_find_context(dev_priv, id);
+		if (!context) {
+			result = -EINVAL;
+			break;
+		}
+		/*
+		 * Copy the reset status to value which also serves as
+		 * the out parameter
+		 */
+		if (copy_to_user(param->value, &(context->reset_status),
+			sizeof(unsigned int))) {
+			result = -EFAULT;
+			break;
+		}
+		/* Clear reset status once its been queried */
+		context->reset_status = KGSL_CTX_STAT_NO_ERROR;
 		break;
 	}
 	default:
