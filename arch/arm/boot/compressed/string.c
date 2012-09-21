@@ -39,7 +39,7 @@ void *memcpy(void *__dest, __const void *__src, size_t __n)
 
 	return __dest;
 }
-
+/*
 void *memmove(void *__dest, __const void *__src, size_t count)
 {
 	unsigned char *d = __dest;
@@ -64,7 +64,7 @@ size_t strlen(const char *s)
 		sc++;
 	return sc - s;
 }
-
+*/
 int memcmp(const void *cs, const void *ct, size_t count)
 {
 	const unsigned char *su1 = cs, *su2 = ct, *end = su1 + count;
