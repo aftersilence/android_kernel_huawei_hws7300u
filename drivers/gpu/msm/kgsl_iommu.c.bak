@@ -71,7 +71,6 @@
 	return NULL;
 }
 */
-#ifdef CONFIG_MSM_IOMMU
 /*static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 	struct device *dev, unsigned long addr, int flags)
 {
@@ -99,8 +98,8 @@
 			kgsl_mmu_get_ptname_from_ptbase(ptbase), 0);
 
 	return 0;
-}*/
-#endif
+}
+*/
 /*
  * kgsl_iommu_disable_clk - Disable iommu clocks
  * @mmu - Pointer to mmu structure
@@ -108,7 +107,6 @@
  * Disables iommu clocks
  * Return - void
  */
-
 static void kgsl_iommu_disable_clk(struct kgsl_mmu *mmu)
 {
 	struct kgsl_iommu *iommu = mmu->priv;
@@ -951,7 +949,6 @@ static int kgsl_iommu_close(struct kgsl_mmu *mmu)
 		kgsl_sg_free(iommu->iommu_units[i].reg_map.sg,
 				iommu->iommu_units[i].reg_map.sglen);
 	}
-
 	if (mmu->priv_bank_table)
 		kgsl_mmu_putpagetable(mmu->priv_bank_table);
 	if (mmu->defaultpagetable)

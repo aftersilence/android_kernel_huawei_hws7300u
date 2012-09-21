@@ -1593,6 +1593,7 @@ static int memdesc_sg_virt(struct kgsl_memdesc *memdesc,
 	unsigned long paddr = (unsigned long) addr;
 
 	memdesc->sg = kgsl_sg_alloc(sglen);
+
 	if (memdesc->sg == NULL)
 		return -ENOMEM;
 

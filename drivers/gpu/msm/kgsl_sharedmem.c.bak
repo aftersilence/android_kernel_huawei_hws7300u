@@ -357,7 +357,6 @@ static void kgsl_page_alloc_free(struct kgsl_memdesc *memdesc)
 		for_each_sg(memdesc->sg, sg, sglen, i)
 			__free_page(sg_page(sg));
 }
-
 static int kgsl_contiguous_vmflags(struct kgsl_memdesc *memdesc)
 {
 	return VM_RESERVED | VM_IO | VM_PFNMAP | VM_DONTEXPAND;
