@@ -44,6 +44,8 @@ Module.markers
 Module.symvers
 !.gitignore
 !.mailmap
+arch/arm/boot/compressed/ashldi3.S
+arch/arm/boot/compressed/piggy.xzkern
 
 #
 # Generated include files
