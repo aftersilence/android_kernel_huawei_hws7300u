@@ -466,7 +466,7 @@ error:
 }
 
 DEFINE_MUTEX(mdp_lut_push_sem);
-static int mdp_lut_i;
+int mdp_lut_i;
 static int mdp_lut_hw_update(struct fb_cmap *cmap)
 {
 	int i;
@@ -497,8 +497,8 @@ static int mdp_lut_hw_update(struct fb_cmap *cmap)
 	return 0;
 }
 
-static int mdp_lut_push;
-static int mdp_lut_push_i;
+int mdp_lut_push;
+int mdp_lut_push_i;
 static int mdp_lut_update_nonlcdc(struct fb_info *info, struct fb_cmap *cmap)
 {
 	int ret;
@@ -534,8 +534,8 @@ static int mdp_lut_update_lcdc(struct fb_info *info, struct fb_cmap *cmap)
 	}
 
 	/*mask off non LUT select bits*/
-	out = inpdw(MDP_BASE + 0x90070) & ~(0x1 << 10);
-	MDP_OUTP(MDP_BASE + 0x90070, (mdp_lut_i << 10) | out);
+        out = inpdw(MDP_BASE + 0x90070) & ~((0x1 << 10) | 0x7);
+        MDP_OUTP(MDP_BASE + 0x90070, (mdp_lut_i << 10) | 0x7 | out);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 	mdp_lut_i = (mdp_lut_i + 1)%2;
 
@@ -548,9 +548,9 @@ static void mdp_lut_enable(void)
 	if (mdp_lut_push) {
 		mutex_lock(&mdp_lut_push_sem);
 		mdp_lut_push = 0;
-		out = inpdw(MDP_BASE + 0x90070) & ~(0x1 << 10);
+		out = inpdw(MDP_BASE + 0x90070) & ~((0x1 << 10) | 0x7);
 		MDP_OUTP(MDP_BASE + 0x90070,
-				(mdp_lut_push_i << 10) | out);
+				(mdp_lut_push_i << 10) | 0x7 | out);
 		mutex_unlock(&mdp_lut_push_sem);
 	}
 }
@@ -1651,8 +1651,7 @@ void mdp_histogram_handle_isr(struct mdp_hist_mgmt *mgmt)
 		__mdp_histogram_kickoff(mgmt);
 
 	if (isr & INTR_HIST_DONE) {
-		if ((waitqueue_active(&mgmt->mdp_hist_comp.wait))
-			 && (mgmt->hist != NULL)) {
+		if (waitqueue_active(&mgmt->mdp_hist_comp.wait)) {
 			if (!queue_work(mdp_hist_wq,
 						&mgmt->mdp_histogram_worker)) {
 				pr_err("%s %d- can't queue hist_read\n",
