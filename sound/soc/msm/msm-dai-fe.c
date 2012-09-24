@@ -50,8 +50,7 @@ static struct snd_soc_dai_driver msm_fe_dais[] = {
 	{
 		.playback = {
 			.stream_name = "Multimedia1 Playback",
-			.rates = (SNDRV_PCM_RATE_8000_48000|
-					SNDRV_PCM_RATE_KNOT),
+			.rates = SNDRV_PCM_RATE_8000_48000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 			.channels_min = 1,
 			.channels_max = 2,
@@ -60,22 +59,20 @@ static struct snd_soc_dai_driver msm_fe_dais[] = {
 		},
 		.capture = {
 			.stream_name = "Multimedia1 Capture",
-			.rates = (SNDRV_PCM_RATE_8000_48000|
-					SNDRV_PCM_RATE_KNOT),
+			.rates = SNDRV_PCM_RATE_8000_48000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 			.channels_min = 1,
 			.channels_max = 2,
 			.rate_min =     8000,
 			.rate_max =	48000,
 		},
-		.ops = &msm_fe_Multimedia_dai_ops,
+		.ops = &msm_fe_dai_ops,
 		.name = "MultiMedia1",
 	},
 	{
 		.playback = {
 			.stream_name = "Multimedia2 Playback",
-			.rates = (SNDRV_PCM_RATE_8000_48000|
-					SNDRV_PCM_RATE_KNOT),
+			.rates = SNDRV_PCM_RATE_8000_48000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 			.channels_min = 1,
 			.channels_max = 6,
@@ -84,15 +81,14 @@ static struct snd_soc_dai_driver msm_fe_dais[] = {
 		},
 		.capture = {
 			.stream_name = "Multimedia2 Capture",
-			.rates = (SNDRV_PCM_RATE_8000_48000|
-					SNDRV_PCM_RATE_KNOT),
+			.rates = SNDRV_PCM_RATE_8000_48000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 			.channels_min = 1,
 			.channels_max = 2,
 			.rate_min =     8000,
 			.rate_max =	48000,
 		},
-		.ops = &msm_fe_Multimedia_dai_ops,
+		.ops = &msm_fe_dai_ops,
 		.name = "MultiMedia2",
 	},
 	{
