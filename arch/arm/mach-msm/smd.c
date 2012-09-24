@@ -312,7 +312,17 @@ static void notify_other_smsm(uint32_t smsm_entry, uint32_t notify_mask)
 		MSM_TRIG_A2DSPS_SMSM_INT;
 	}
 
-	smsm_cb_snapshot();
+	/*
+	 * Notify local SMSM callback clients without wakelock since this
+	 * code is used by power management during power-down/-up sequencing
+	 * on DEM-based targets.  Grabbing a wakelock in this case will
+	 * abort the power-down sequencing.
+	 */
+	if (smsm_info.intr_mask &&
+	    (__raw_readl(SMSM_INTR_MASK_ADDR(smsm_entry, SMSM_APPS))
+				& notify_mask)) {
+		smsm_cb_snapshot(0);
+	}
 }
 
 static inline void notify_modem_smd(void)
