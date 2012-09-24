@@ -666,6 +666,8 @@ static struct platform_device *common_devices[] __initdata = {
 	&apq_pcm_afe,
 	&apq_cpudai_auxpcm_rx,
 	&apq_cpudai_auxpcm_tx,
+	&apq8064_device_cache_erp,
+	&msm_pil_vidc,
 };
 
 static struct platform_device *sim_devices[] __initdata = {
