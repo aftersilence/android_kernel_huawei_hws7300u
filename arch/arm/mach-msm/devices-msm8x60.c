@@ -709,7 +709,7 @@ static struct kgsl_device_platform_data kgsl_3d0_pdata = {
 	.init_level = 0,
 	.num_levels = 5,
 	.set_grp_async = NULL,
-	.idle_timeout = HZ/5,
+	.idle_timeout = HZ/12,
 	.nap_allowed = true,
 	.clk_map = KGSL_CLK_CORE | KGSL_CLK_IFACE | KGSL_CLK_MEM_IFACE,
 #ifdef CONFIG_MSM_BUS_SCALING
@@ -1374,6 +1374,98 @@ int __init msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat)
 	return platform_device_register(pdev);
 }
 
+#ifdef CONFIG_MSM_CAMERA_V4L2
+static struct resource msm_csic0_resources[] = {
+	{
+		.name   = "csic",
+		.start  = 0x04800000,
+		.end    = 0x04800000 + 0x00000400 - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+	{
+		.name   = "csic",
+		.start  = CSI_0_IRQ,
+		.end    = CSI_0_IRQ,
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+static struct resource msm_csic1_resources[] = {
+	{
+		.name   = "csic",
+		.start  = 0x04900000,
+		.end    = 0x04900000 + 0x00000400 - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+	{
+		.name   = "csic",
+		.start  = CSI_1_IRQ,
+		.end    = CSI_1_IRQ,
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+struct resource msm_vfe_resources[] = {
+	{
+		.name   = "msm_vfe",
+		.start	= 0x04500000,
+		.end	= 0x04500000 + SZ_1M - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name   = "msm_vfe",
+		.start	= VFE_IRQ,
+		.end	= VFE_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+static struct resource msm_vpe_resources[] = {
+	{
+		.name   = "vpe",
+		.start	= 0x05300000,
+		.end	= 0x05300000 + SZ_1M - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name   = "vpe",
+		.start	= INT_VPE,
+		.end	= INT_VPE,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device msm_device_csic0 = {
+	.name           = "msm_csic",
+	.id             = 0,
+	.resource       = msm_csic0_resources,
+	.num_resources  = ARRAY_SIZE(msm_csic0_resources),
+};
+
+struct platform_device msm_device_csic1 = {
+	.name           = "msm_csic",
+	.id             = 1,
+	.resource       = msm_csic1_resources,
+	.num_resources  = ARRAY_SIZE(msm_csic1_resources),
+};
+
+struct platform_device msm_device_vfe = {
+	.name           = "msm_vfe",
+	.id             = 0,
+	.resource       = msm_vfe_resources,
+	.num_resources  = ARRAY_SIZE(msm_vfe_resources),
+};
+
+struct platform_device msm_device_vpe = {
+	.name           = "msm_vpe",
+	.id             = 0,
+	.resource       = msm_vpe_resources,
+	.num_resources  = ARRAY_SIZE(msm_vpe_resources),
+};
+
+#endif
+
+
 #define MIPI_DSI_HW_BASE	0x04700000
 #define ROTATOR_HW_BASE		0x04E00000
 #define TVENC_HW_BASE		0x04F00000
@@ -1871,9 +1963,8 @@ struct platform_device msm_device_smd = {
 };
 
 static struct msm_watchdog_pdata msm_watchdog_pdata = {
-	//.pet_time = 10000,
 	.pet_time = 3000,
-	.bark_time = 11000,
+	.bark_time = 15000,
 	.has_secure = true,
 };
 

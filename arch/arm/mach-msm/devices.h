@@ -271,3 +271,8 @@ extern struct platform_device msm_tpiu_device;
 extern struct platform_device msm_funnel_device;
 extern struct platform_device msm_ptm_device;
 #endif
+
+extern struct platform_device msm_device_csic0;
+extern struct platform_device msm_device_csic1;
+extern struct platform_device msm_device_vfe;
+extern struct platform_device msm_device_vpe;
