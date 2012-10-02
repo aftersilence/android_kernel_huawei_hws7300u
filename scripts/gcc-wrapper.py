@@ -64,9 +64,6 @@ allowed_warnings = set([
     "vx6953.c:3124",
     "dma-mapping.c:238",
     "dma-mapping.c:284",
-    "t1320.c:1128",
-    "s7020.c:1150",
-    "radio-tavarua.c:1324",
  ])
 
 # Capture the name of the object file, can find it.

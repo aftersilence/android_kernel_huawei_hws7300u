@@ -302,7 +302,7 @@ static int get_switch_voltage(void)
 ===========================================================================*/
 static int get_det_status(void)
 {
-	unsigned int temp;
+	unsigned int temp = 0;
 	unsigned int value = 0;
 	unsigned int times = 0;
 
@@ -337,11 +337,9 @@ static int get_det_status(void)
 ===========================================================================*/
 static void check_headset_status(struct pm8058_othc *dd)
 {
-	int gpio_status;
-	int avg;
-	int switch_ = 0;
-
-	gpio_status = get_det_status();		//gpio_get_value(HEADSET_DETECT_GPIO);
+	int gpio_status  = get_det_status();
+	int avg = -1;
+	int switch_ = -1;
 
 	printk(KERN_INFO "gpio_143_status = %d \n", gpio_status);
 
@@ -350,7 +348,7 @@ static void check_headset_status(struct pm8058_othc *dd)
 		/* get switch voltage */
 		avg = get_switch_voltage();
 
-		printk(KERN_INFO "average voltage=%d \n", avg);
+//		printk(KERN_INFO "average voltage=%d \n", avg);
 
 		if (avg < UPPER_SWITCH_VOLTAGE)  {
 //		if((avg > LOWER_SWITCH_VOLTAGE) && (avg < UPPER_SWITCH_VOLTAGE))  {
