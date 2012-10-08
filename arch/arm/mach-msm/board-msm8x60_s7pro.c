@@ -8387,11 +8387,13 @@ static struct i2c_board_info BQ275X0_boardinfo[] __initdata = {
 #endif
 /* End:wuxinxian w00176579 add for bq27510*/
 
+#if 0
 static struct i2c_board_info AD7156_boardinfo[] __initdata = {
 	{
 		I2C_BOARD_INFO("ad7156",0x48),	//(0xAA >> 1)
 	},	
 };	
+#endif
 
 /* begin:wuxinxian w00176579 add for bs300*/
 #ifdef CONFIG_BELASIGNA_BS300
@@ -8912,13 +8914,14 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		ARRAY_SIZE(msm_bq27520_board_info),
 	},
 #endif
+#if 0
 	{
 	    I2C_SURF,
 	    MSM_GSBI12_QUP_I2C_BUS_ID, //i2c for sensor
 	    AD7156_boardinfo,
 	    ARRAY_SIZE(AD7156_boardinfo),
 	},
-
+#endif
 /* begin: added by z00168965 for gsensor */
 #if defined(CONFIG_ACCELEROMETER_ST_LIS35DE) || defined(CONFIG_ACCELEROMETER_ST_LIS35DE_MODULE)
 	{
