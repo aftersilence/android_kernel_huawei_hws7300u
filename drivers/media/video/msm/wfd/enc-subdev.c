@@ -1777,7 +1777,15 @@ static long venc_free_recon_buffers(struct v4l2_subdev *sd, void *arg)
 			if (rc)
 				WFD_MSG_ERR("Failed to free recon buffer\n");
 
-			if (client_ctx->recon_buffer_ion_handle[i]) {
+			if (!IS_ERR_OR_NULL(
+				client_ctx->recon_buffer_ion_handle[i])) {
+				if (!inst->secure) {
+					ion_unmap_iommu(
+					client_ctx->user_ion_client,
+					client_ctx->recon_buffer_ion_handle[i],
+					VIDEO_DOMAIN, VIDEO_MAIN_POOL);
+				}
+
 				ion_unmap_kernel(client_ctx->user_ion_client,
 					client_ctx->recon_buffer_ion_handle[i]);
 				ion_free(client_ctx->user_ion_client,
