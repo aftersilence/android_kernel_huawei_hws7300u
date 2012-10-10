@@ -550,6 +550,12 @@ int mdp4_lcdc_on(struct platform_device *pdev)
 	lcdc_underflow_clr = mfd->panel_info.lcdc.underflow_clr;
 	lcdc_hsync_skew = mfd->panel_info.lcdc.hsync_skew;
 
+	pr_info("%s: <ID=%d %dx%d (%d,%d,%d), (%d,%d,%d) %dMHz>\n", __func__,
+		var->reserved[3], var->xres, var->yres,
+		var->right_margin, var->hsync_len, var->left_margin,
+		var->lower_margin, var->vsync_len, var->upper_margin,
+		var->pixclock/1000/1000);
+
 	lcdc_width = var->xres + mfd->panel_info.lcdc.xres_pad;
 	lcdc_height = var->yres + mfd->panel_info.lcdc.yres_pad;
 	lcdc_bpp = mfd->panel_info.bpp;
