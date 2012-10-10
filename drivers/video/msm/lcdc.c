@@ -151,126 +151,6 @@ out:
 	return ret;
 }
 
-int hw_set_lcdc_clk(void);
-
-unsigned int g_mdp_lcdc_clk_set_flag = 0;
-unsigned int g_pixel_mdp_clk_rate = 0;
-unsigned int g_pixel_mdp_clk_rate_old = 0; /* drives the lcdc block in mdp */
-	
-#ifndef CONFIG_MSM_BUS_SCALING
-static struct clk * pixel_ebi_clk = NULL;
-unsigned int g_ebi1_clk_rate = 0; /* drives the lcdc block in mdp */
-unsigned int g_ebi1_clk_rate_old = 0; /* drives the lcdc block in mdp */
-#endif
-
-
-int set_lcdc_clk(struct fb_info *fbi)
-{
-	int ret = 0;
-	struct msm_fb_data_type *mfd;
-	unsigned long panel_pixclock_freq = 0;
-#ifndef CONFIG_MSM_BUS_SCALING
-	unsigned long pm_qos_rate;
-#endif
-	mfd = (struct msm_fb_data_type *)fbi->par;
-
-#ifndef CONFIG_MSM_BUS_SCALING
-	pixel_ebi_clk = mfd->ebi1_clk;
-#endif
-
-	if (lcdc_pdata && lcdc_pdata->lcdc_get_clk)
-		panel_pixclock_freq = lcdc_pdata->lcdc_get_clk();
-
-	if (!panel_pixclock_freq)
-		panel_pixclock_freq = mfd->fbi->var.pixclock;
-#ifdef CONFIG_MSM_BUS_SCALING
-	mdp_bus_scale_update_request(2);
-#else
-#ifdef CONFIG_MSM_NPA_SYSTEM_BUS
-	pm_qos_rate = MSM_AXI_FLOW_MDP_LCDC_WVGA_2BPP;
-#else
-	if (panel_pixclock_freq > 65000000)
-		/* pm_qos_rate should be in Khz */
-		pm_qos_rate = panel_pixclock_freq / 1000 ;
-	else
-		pm_qos_rate = 65000;
-#endif
-	g_ebi1_clk_rate_old = clk_get_rate(mfd->ebi1_clk);
-	g_ebi1_clk_rate = pm_qos_rate * 1000;
-	
-#endif
-	mfd = (struct msm_fb_data_type *)fbi->par;
-    g_pixel_mdp_clk_rate_old = clk_get_rate(pixel_mdp_clk);
-	mfd->fbi->var.pixclock = clk_round_rate(pixel_mdp_clk, mfd->fbi->var.pixclock);
-
-	g_pixel_mdp_clk_rate = mfd->fbi->var.pixclock;
-	g_mdp_lcdc_clk_set_flag = 1;
-//	pr_err("%s: set pclk %u  1111111111\n",__func__, g_pixel_mdp_clk_rate);
-	return ret;
-}
-
-int hw_set_lcdc_clk(void)
-{
-	int ret = 0;
-	if(0 == g_mdp_lcdc_clk_set_flag)
-	{
-	//	pr_err("%s: not set lcdc pclk\n",__func__);
-		return ret;
-	}
-
-	#ifndef CONFIG_MSM_BUS_SCALING
-	if (pixel_ebi_clk) 
-	{
-		clk_disable(pixel_ebi_clk);
-		ret = clk_set_rate(pixel_ebi_clk, g_ebi1_clk_rate);
-		if (ret) 
-		{
-			pr_err("%s: Can't set MDP LCDC ebi  clock to rate %u\n",
-				__func__, g_ebi1_clk_rate);
-			clk_set_rate(pixel_ebi_clk, g_ebi1_clk_rate_old);
-			clk_enable(pixel_ebi_clk);
-
-		goto out;
-		}		
-
-		clk_enable(pixel_ebi_clk);
-	}
-	#endif
-		
-	clk_disable(pixel_mdp_clk);
-	ret = clk_set_rate(pixel_mdp_clk, g_pixel_mdp_clk_rate);
-	if (ret) {
-		pr_err("%s: Can't set MDP LCDC pixel clock to rate %u\n",
-			__func__, g_pixel_mdp_clk_rate);
-		#ifndef CONFIG_MSM_BUS_SCALING
-		clk_disable(pixel_ebi_clk);
-		clk_set_rate(pixel_ebi_clk, g_ebi1_clk_rate_old);
-		clk_enable(pixel_ebi_clk);
-		#endif
-		clk_set_rate(pixel_mdp_clk, g_pixel_mdp_clk_rate_old);
-		clk_enable(pixel_mdp_clk);
-
-		goto out;
-	}
-	
-	g_mdp_lcdc_clk_set_flag = 0;
-	
-	clk_enable(pixel_mdp_clk);
-	
-	if (lcdc_pdata && lcdc_pdata->lcdc_power_save)
-		lcdc_pdata->lcdc_power_save(1);
-	if (lcdc_pdata && lcdc_pdata->lcdc_gpio_config)
-		lcdc_pdata->lcdc_gpio_config(1);
-out:	
-	if(ret)
-		pr_err("%s: ERR set pclk %u, ret = %d\n",__func__, g_pixel_mdp_clk_rate,ret);
-//	else
-//		pr_err("%s: SUC set pclk %u, ret = %d\n",__func__, g_pixel_mdp_clk_rate,ret);
-
-	return ret;
-}
-EXPORT_SYMBOL( set_lcdc_clk );
-EXPORT_SYMBOL( hw_set_lcdc_clk );
 static int lcdc_probe(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd;
@@ -375,12 +255,6 @@ static int lcdc_probe(struct platform_device *pdev)
 		goto lcdc_probe_err;
 
 	pdev_list[pdev_list_cnt++] = pdev;
-
-	/* DSTxkf37152 xiangguangchao enable lcd display, begin 2011/3/9 */
-	//pdata->on(mfd->pdev);
-	//mfd->bl_level = (mfd->panel_info.bl_max)/10 * 4;
-	//pdata->set_backlight(mfd);
-	/* DSTxkf37152 xiangguangchao enable lcd display, end 2011/3/9 */
 
 	return 0;
 

@@ -164,6 +164,7 @@ void mdp4_overlay_update_lcd(struct msm_fb_data_type *mfd)
 		MDP_OUTP(MDP_BASE + 0x00098, 0x01);
 		mdp4_init_writeback_buf(mfd, MDP4_MIXER0);
 		pipe->ov_blt_addr = 0;
+		pipe->dma_blt_addr = 0;
 	} else {
 		pipe = mddi_pipe;
 	}
@@ -254,7 +255,8 @@ int mdp4_mddi_overlay_blt_start(struct msm_fb_data_type *mfd)
 	unsigned long flag;
 
 	pr_debug("%s: blt_end=%d ov_blt_addr=%x pid=%d\n",
-	__func__, mddi_pipe->blt_end, (int)mddi_pipe->ov_blt_addr, current->pid);
+		__func__, mddi_pipe->blt_end,
+		(int)mddi_pipe->ov_blt_addr, current->pid);
 
 	mdp4_allocate_writeback_buf(mfd, MDP4_MIXER0);
 
@@ -271,7 +273,7 @@ int mdp4_mddi_overlay_blt_start(struct msm_fb_data_type *mfd)
 		mddi_pipe->ov_cnt = 0;
 		mddi_pipe->dmap_cnt = 0;
 		mddi_pipe->ov_blt_addr = mfd->ov0_wb_buf->write_addr;
-		mddi_pipe->dma_blt_addr = mfd->ov0_wb_buf->read_addr;
+		mddi_pipe->dma_blt_addr = mfd->ov0_wb_buf->write_addr;
 		mdp4_stat.blt_mddi++;
 		spin_unlock_irqrestore(&mdp_spin_lock, flag);
 	return 0;
@@ -679,7 +681,7 @@ void mdp4_mddi_dma_s_kickoff(struct msm_fb_data_type *mfd,
 {
 	mdp_enable_irq(MDP_DMA_S_TERM);
 
-	if (mddi_pipe->dma_blt_addr == 0)
+	if (mddi_pipe->ov_blt_addr == 0)
 		mfd->dma->busy = TRUE;
 
 	mfd->ibuf_flushed = TRUE;
