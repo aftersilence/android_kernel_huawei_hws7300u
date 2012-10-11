@@ -1440,7 +1440,7 @@ functions_show(struct device *pdev, struct device_attribute *attr, char *buf)
 	mutex_lock(&dev->mutex);
 
 	list_for_each_entry(f, &dev->enabled_functions, enabled_list)
-		buff += sprintf(buff, "%s,", f->name);
+		buff += snprintf(buff, PAGE_SIZE, "%s,", f->name);
 
 	mutex_unlock(&dev->mutex);
 
@@ -1563,7 +1563,7 @@ static ssize_t								\
 field ## _store(struct device *dev, struct device_attribute *attr,	\
 		const char *buf, size_t size)				\
 {									\
-	int value;					       		\
+	int value;							\
 	if (sscanf(buf, format_string, &value) == 1) {			\
 		device_desc.field = value;				\
 		return size;						\
@@ -1584,7 +1584,14 @@ field ## _store(struct device *dev, struct device_attribute *attr,	\
 		const char *buf, size_t size)				\
 {									\
 	if (size >= sizeof(buffer)) return -EINVAL;			\
+<<<<<<< HEAD
 	return strlcpy(buffer, buf, sizeof(buffer));			\
+=======
+	DONOTHING_FOR_GG_MODE();					\
+	strlcpy(buffer, buf, sizeof(buffer));				\
+	strim(buffer);							\
+	return size;							\
+>>>>>>> 55faf86... usb: gadget: fix after aosp merge
 }									\
 static DEVICE_ATTR(field, S_IRUGO | S_IWUSR, field ## _show, field ## _store);
 
