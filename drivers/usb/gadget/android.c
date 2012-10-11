@@ -1353,23 +1353,6 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	char buf[256], *b;
 	int err;
 
-<<<<<<< HEAD
-=======
-#ifdef CONFIG_USB_ANDROID_GG
-	if (usb_gg) {
-		pr_info("android_usb: Skip to store the function "
-			"since GG is enabled");
-		return size;
-	}
-#endif
-	mutex_lock(&dev->mutex);
-
-	if (dev->enabled) {
-		mutex_unlock(&dev->mutex);
-		return -EBUSY;
-	}
-
->>>>>>> ea3ada6... usb: gadget: android: Don't allow changing the functions list if enabled
 	INIT_LIST_HEAD(&dev->enabled_functions);
 
 	strlcpy(buf, buff, sizeof(buf));
