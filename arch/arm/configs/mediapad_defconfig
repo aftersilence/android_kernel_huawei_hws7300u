@@ -1,6 +1,6 @@
 #
 # Automatically generated make config: don't edit
-# Linux/arm 3.0.44 Kernel Configuration
+# Linux/arm 3.0.45 Kernel Configuration
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -2658,7 +2658,7 @@ CONFIG_USB_GADGET=y
 # CONFIG_USB_GADGET_DEBUG is not set
 # CONFIG_USB_GADGET_DEBUG_FILES is not set
 # CONFIG_USB_GADGET_DEBUG_FS is not set
-CONFIG_USB_GADGET_VBUS_DRAW=2
+CONFIG_USB_GADGET_VBUS_DRAW=500
 CONFIG_USB_GADGET_SELECTED=y
 # CONFIG_USB_GADGET_FUSB300 is not set
 # CONFIG_USB_GADGET_R8A66597 is not set
