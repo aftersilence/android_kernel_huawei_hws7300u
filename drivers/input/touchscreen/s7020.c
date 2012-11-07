@@ -949,7 +949,7 @@ static int s7020_read_pdt(struct s7020 *ts)
 	int ret = 0;
 	int nFd = 0;
 	int interruptCount = 0;
-	__u8 data_length;
+	__u8 data_length = -1;
 
 	struct i2c_msg fd_i2c_msg[2];
 	__u8 fd_reg;
