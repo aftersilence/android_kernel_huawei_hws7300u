@@ -1246,7 +1246,6 @@ err:
 }
 
 #define MDP_HISTOGRAM_TIMEOUT_MS	84 /*5 Frames*/
-#define MDP_HISTOGRAM_TIMEOUT_MS	84 /*5 Frames*/
 static int mdp_do_histogram(struct fb_info *info,
 					struct mdp_histogram_data *hist)
 {
