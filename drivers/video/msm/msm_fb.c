@@ -47,6 +47,7 @@
 #include "tvenc.h"
 #include "mdp.h"
 #include "mdp4.h"
+#include "external_common.h"
 
 #ifdef CONFIG_FB_MSM_LOGO
 #define INIT_IMAGE_FILE "/initlogo.rle"
@@ -3202,6 +3203,10 @@ static int msmfb_handle_pp_ioctl(struct msmfb_mdp_pp *pp_ptr)
 		default:
 			break;
 		}
+		break;
+	case mdp_op_qseed_cfg:
+		ret = mdp4_qseed_cfg((struct mdp_qseed_cfg_data *)
+						&pp_ptr->data.qseed_cfg_data);
 		break;
 #endif
 	default:
