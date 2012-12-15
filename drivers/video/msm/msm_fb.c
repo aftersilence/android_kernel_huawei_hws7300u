@@ -386,10 +386,10 @@ static int msm_fb_remove(struct platform_device *pdev)
 
 	msm_fb_remove_sysfs(pdev);
 
+	pm_runtime_disable(mfd->fbi->dev);
+
 	if (!mfd)
 		return -ENODEV;
-
-	pm_runtime_disable(mfd->fbi->dev);
 
 	if (mfd->key != MFD_KEY)
 		return -EINVAL;
