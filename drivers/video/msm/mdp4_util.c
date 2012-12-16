@@ -245,18 +245,8 @@ void mdp4_fetch_cfg(uint32 core_clk)
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 }
 
-#define MAX_FBI_LIST 32
-extern struct msm_fb_data_type *mfd_list[MAX_FBI_LIST];
 int Uderrunflag = 1;
 
-void reset_mdp(struct work_struct *pwork)
-{	
-	Uderrunflag  = 2;
-	mdp4_lcdc_off(mfd_list[0]->pdev);
-    //msleep(10);
-	mdp4_lcdc_on(mfd_list[0]->pdev);
-	Uderrunflag = 1;
-}
 void mdp4_hw_init(void)
 {
 	ulong bits;
@@ -345,7 +335,6 @@ void mdp4_hw_init(void)
 		printk(KERN_INFO "create hdmi_wq error\n");
 		return;
 	}		
-	INIT_WORK(&gUderrunWork, reset_mdp);
 }
 
 
@@ -3286,12 +3275,6 @@ int mdp4_qseed_cfg(struct mdp_qseed_cfg_data *cfg)
 
 	if (!mdp4_pp_block2qseed(cfg->block)) {
 		ret = -ENOTTY;
-		goto error;
-	}
-
-	if (cfg->table_num != 1) {
-		ret = -ENOTTY;
-		pr_info("%s: Only QSEED table1 supported.\n", __func__);
 		goto error;
 	}
 

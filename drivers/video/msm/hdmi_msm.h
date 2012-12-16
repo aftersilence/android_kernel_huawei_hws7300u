@@ -81,6 +81,7 @@ struct hdmi_msm_state_type {
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL_HDCP_SUPPORT
 	boolean hdcp_activating;
 	boolean reauth ;
+	boolean reauth_pending;
 	struct work_struct hdcp_reauth_work, hdcp_work;
 	struct completion hdcp_success_done;
 	struct timer_list hdcp_timer;

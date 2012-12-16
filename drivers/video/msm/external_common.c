@@ -192,7 +192,7 @@ static ssize_t external_common_rda_video_mode_str(struct device *dev,
 #ifdef CONFIG_FB_MSM_HDMI_COMMON
 struct hdmi_disp_mode_timing_type
 	hdmi_common_supported_video_mode_lut[HDMI_VFRMT_MAX] = {
-	HDMI_SETTINGS_640x480p60_4_3,
+	VFRMT_NOT_SUPPORTED(HDMI_VFRMT_640x480p60_4_3),
 	VFRMT_NOT_SUPPORTED(HDMI_VFRMT_720x480p60_4_3),
 	VFRMT_NOT_SUPPORTED(HDMI_VFRMT_720x480p60_16_9),
 	VFRMT_NOT_SUPPORTED(HDMI_VFRMT_1280x720p60_16_9),
@@ -1506,24 +1506,14 @@ bool hdmi_common_get_video_format_from_drv_data(struct msm_fb_data_type *mfd)
 			" to specify mode", mfd->var_xres, mfd->var_yres);
 		switch (mfd->var_xres) {
 		default:
-		case  640:
-			format = HDMI_VFRMT_640x480p60_4_3;
-			break;
 		case  720:
-			format = (mfd->var_yres == 480)
-				? HDMI_VFRMT_720x480p60_16_9
-				: HDMI_VFRMT_720x576p50_16_9;
+			format = HDMI_VFRMT_720x480p60_16_9;
 			break;
 		case 1280:
 			format = HDMI_VFRMT_1280x720p60_16_9;
 			break;
-		case 1440:
-			format = (mfd->var_yres == 480)
-				? HDMI_VFRMT_1440x480i60_16_9
-				: HDMI_VFRMT_1440x576i50_16_9;
-			break;
 		case 1920:
-			format = HDMI_VFRMT_1920x1080p60_16_9;
+			format = HDMI_VFRMT_1920x1080p30_16_9;
 			break;
 		}
 	}
