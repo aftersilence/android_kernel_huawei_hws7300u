@@ -720,6 +720,14 @@ config FB_MSM_HDMI_MSM_PANEL_CEC_SUPPORT
 	  Support for HDMI CEC Feature
 	  Choose to enable CEC
 
+config FB_MSM_HDMI_MSM_PANEL_CEC_USES_UEVENT
+	depends on FB_MSM_HDMI_MSM_PANEL_CEC_SUPPORT
+	bool "Enable CEC uevent on recv"
+	default n
+	---help---
+	  Support for sending uevent on recving CEC frame
+	  Choose to enable CEC uevnet
+
 config FB_MSM_HDMI_MHL
 	depends on FB_MSM_HDMI_MSM_PANEL
 	bool 'HDMI to MHL support'

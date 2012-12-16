@@ -661,16 +661,15 @@ static ssize_t hdmi_msm_wta_cec_frame(struct device *dev,
 	int i;
 	int retry = ((struct hdmi_msm_cec_msg *) buf)->retransmit;
 
-	for (i = 0; i < RETRANSMIT_MAX_NUM; i++) {
+	for (i = 0; i < TRANSMIT_MAX_NUM; i++) {
 		hdmi_msm_cec_msg_send((struct hdmi_msm_cec_msg *) buf);
-		if (hdmi_msm_state->cec_frame_wr_status
-		    & CEC_STATUS_WR_ERROR && retry--) {
-			mutex_lock(&hdmi_msm_state_mutex);
-			if (hdmi_msm_state->fsm_reset_done)
-				retry++;
-			mutex_unlock(&hdmi_msm_state_mutex);
-			msleep(20);
-		} else
+		if (!(hdmi_msm_state->cec_frame_wr_status
+		      & CEC_STATUS_WR_DONE) && retry--)
+			/* should wait 3 nominal data bit period (= 7.2ms) */
+			/* at least. */
+			usleep_range(7200, 7200);
+		else
+
 			break;
 	}
 
