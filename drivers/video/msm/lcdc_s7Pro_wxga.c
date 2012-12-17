@@ -461,7 +461,6 @@ static int lcdc_chimei_panel_on(struct platform_device *pdev)
 
 static int lcdc_chimei_panel_off(struct platform_device *pdev)
 {
-    unsigned int my_bl_level = 0; 
       printk(KERN_INFO "lcdc_chimei_panel_off---------------begin");
 	/* pull low to disable */
     
@@ -483,15 +482,7 @@ static int lcdc_chimei_panel_off(struct platform_device *pdev)
 
 	msleep(10);
 
-    if (my_hpd_state) {
-        my_bl_level = chimei_bl_level;
-    }
-
     lcdc_chimei_set_backlight(0);
-
-    if (my_hpd_state) {
-        chimei_bl_level = my_bl_level;
-    }
 
       msleep(10);
 	#if S7_HWID_L3H(S7, S7301, B)	

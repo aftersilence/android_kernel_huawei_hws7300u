@@ -14,15 +14,6 @@
 #define __HDMI_MSM_H__
 
 #include <mach/msm_iomap.h>
-
-#include <mach/board.h>
-#if S7_HWID_L3H(S7, S7301, C)
-#include <linux/gpio.h>
-#include <linux/interrupt.h>
-#include <linux/workqueue.h>
-#include <linux/irq.h>
-#endif
-
 #include "external_common.h"
 /* #define PORT_DEBUG */
 
@@ -72,10 +63,6 @@ struct hdmi_msm_state_type {
 	boolean hpd_during_auth;
 	struct work_struct hpd_state_work, hpd_read_work;
 	struct timer_list hpd_state_timer;
-	
-    struct work_struct advanced_hpd_state_work;
-    struct timer_list advanced_hpd_state_timer;
-	
 	struct completion ddc_sw_done;
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL_HDCP_SUPPORT
@@ -128,6 +115,7 @@ struct hdmi_msm_state_type {
 };
 
 extern struct hdmi_msm_state_type *hdmi_msm_state;
+extern bool device_suspended;
 
 uint32 hdmi_msm_get_io_base(void);
 
