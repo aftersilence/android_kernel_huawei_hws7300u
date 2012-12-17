@@ -32,6 +32,7 @@ static struct clk *dsi_m_pclk;
 static struct clk *dsi_s_pclk;
 
 static struct clk *amp_pclk;
+int mipi_dsi_clk_on;
 
 int mipi_dsi_clk_init(struct platform_device *pdev)
 {
@@ -429,22 +430,37 @@ void mipi_dsi_unprepare_clocks(void)
 
 void mipi_dsi_ahb_ctrl(u32 enable)
 {
+	static int ahb_ctrl_done;
 	if (enable) {
+		if (ahb_ctrl_done) {
+			pr_info("%s: ahb clks already ON\n", __func__);
+			return;
+		}
 		clk_enable(amp_pclk); /* clock for AHB-master to AXI */
 		clk_enable(dsi_m_pclk);
 		clk_enable(dsi_s_pclk);
 		mipi_dsi_ahb_en();
 		mipi_dsi_sfpb_cfg();
+		ahb_ctrl_done = 1;
 	} else {
+		if (ahb_ctrl_done == 0) {
+			pr_info("%s: ahb clks already OFF\n", __func__);
+			return;
+		}
 		clk_disable(dsi_m_pclk);
 		clk_disable(dsi_s_pclk);
 		clk_disable(amp_pclk); /* clock for AHB-master to AXI */
+		ahb_ctrl_done = 0;
 	}
 }
 
 void mipi_dsi_clk_enable(void)
 {
 	u32 pll_ctrl = MIPI_INP(MIPI_DSI_BASE + 0x0200);
+	if (mipi_dsi_clk_on) {
+		pr_info("%s: mipi_dsi_clks already ON\n", __func__);
+		return;
+	}
 	MIPI_OUTP(MIPI_DSI_BASE + 0x0200, pll_ctrl | 0x01);
 	mb();
 
@@ -454,10 +470,15 @@ void mipi_dsi_clk_enable(void)
 	mipi_dsi_clk_ctrl(&dsicore_clk, 1);
 	clk_enable(dsi_byte_div_clk);
 	clk_enable(dsi_esc_clk);
+	mipi_dsi_clk_on = 1;
 }
 
 void mipi_dsi_clk_disable(void)
 {
+	if (mipi_dsi_clk_on == 0) {
+		pr_info("%s: mipi_dsi_clks already OFF\n", __func__);
+		return;
+	}
 	clk_disable(dsi_esc_clk);
 	clk_disable(dsi_byte_div_clk);
 
@@ -465,6 +486,7 @@ void mipi_dsi_clk_disable(void)
 	mipi_dsi_clk_ctrl(&dsicore_clk, 0);
 	/* DSIPHY_PLL_CTRL_0, disable dsi pll */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x0200, 0x40);
+	mipi_dsi_clk_on = 0;
 }
 
 void mipi_dsi_phy_ctrl(int on)
@@ -549,7 +571,6 @@ void hdmi_msm_init_phy(int video_format)
 	 */
 	HDMI_OUTP_ND(0x0300, 0x0C); /*0b00001100*/
 
-#if 0
 	if (video_format == HDMI_VFRMT_720x480p60_16_9) {
 		/* PHY REG1 = DTEST_MUX_SEL(5) | PLL_GAIN_SEL(0)
 		 * | OUTVOL_SWING_CTRL(3)
@@ -563,21 +584,6 @@ void hdmi_msm_init_phy(int video_format)
 		 */
 		HDMI_OUTP_ND(0x0304, 0x54); /*0b01010100*/
 	}
-#else 
-	if (video_format == HDMI_VFRMT_720x480p60_16_9) {
-		/* PHY REG1 = DTEST_MUX_SEL(5) | PLL_GAIN_SEL(0)
-			    | OUTVOL_SWING_CTRL(3) */
-		HDMI_OUTP_ND(0x0304, 0x56); /*0b01010110*/
-    } else if (video_format == HDMI_VFRMT_720x480p60_4_3) {
-        HDMI_OUTP_ND(0x0304, 0x52);
-	} else {
-		/* If the freq. is less than 120MHz, use low gain 0 for board
-		   with termination */
-		/* PHY REG1 = DTEST_MUX_SEL(5) | PLL_GAIN_SEL(0)
-			    | OUTVOL_SWING_CTRL(4) */
-		HDMI_OUTP_ND(0x0304, 0x57); /*0b01010111*/
-	}
-#endif
 
 	/* No matter what, start from the power down mode
 	 * PHY REG2 = PD_PWRGEN | PD_PLL | PD_DRIVE_4 | PD_DRIVE_3
@@ -632,6 +638,14 @@ void hdmi_msm_init_phy(int video_format)
 
 void hdmi_msm_powerdown_phy(void)
 {
+	/* Assert RESET PHY from controller */
+	HDMI_OUTP_ND(0x02D4, 0x4);
+	udelay(10);
+	/* De-assert RESET PHY from controller */
+	HDMI_OUTP_ND(0x02D4, 0x0);
+	/* Turn off Driver */
+	HDMI_OUTP_ND(0x0308, 0x1F);
+	udelay(10);
 	/* Disable PLL */
 	HDMI_OUTP_ND(0x030C, 0x00);
 	/* Power down PHY */

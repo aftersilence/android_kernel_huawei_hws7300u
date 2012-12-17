@@ -847,6 +847,8 @@ static inline int mdp_bus_scale_update_request(uint32_t index)
 void mdp_dma_vsync_ctrl(int enable);
 void mdp_dma_video_vsync_ctrl(int enable);
 void mdp_dma_lcdc_vsync_ctrl(int enable);
+void mdp3_vsync_irq_enable(int intr, int term);
+void mdp3_vsync_irq_disable(int intr, int term);
 
 #ifdef MDP_HW_VSYNC
 void vsync_clk_prepare_enable(void);
@@ -894,8 +896,9 @@ static inline int mdp4_overlay_dsi_state_get(void)
 #endif
 
 void mdp_vid_quant_set(void);
+
 #ifndef CONFIG_FB_MSM_MDP40
-static inline void mdp_dsi_cmd_overlay_suspend(struct msm_fb_data_type *mfd)
+static inline void mdp_dsi_cmd_overlay_suspend(void)
 {
 	/* empty */
 }
