@@ -1,4 +1,4 @@
-CMDLINE="console=console=ttyHSL0,115200,n8 androidboot.hardware=hws7300u vmalloc=578M kgsl.ptcount=16"
+CMDLINE="console=ttyHSL0,115200,n8 androidboot.hardware=hws7300u vmalloc=578M kgsl.ptcount=16"
 BASE="0x40300000"
 ramdisk_dir=/home/aftersilence/ramdisk.cpio.gz
 
