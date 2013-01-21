@@ -738,6 +738,11 @@ unsigned long mdp_perf_level2clk_rate(uint32 perf_level);
 
 #ifdef CONFIG_MSM_BUS_SCALING
 int mdp_bus_scale_update_request(uint32_t index);
+#else
+static inline int mdp_bus_scale_update_request(uint32_t index)
+{
+	return 0;
+}
 #endif
 
 #ifdef MDP_HW_VSYNC
@@ -776,6 +781,14 @@ static inline void mdp4_overlay_dsi_state_set(int state)
 static inline int mdp4_overlay_dsi_state_get(void)
 {
 	return 0;
+}
+#endif
+
+void mdp_vid_quant_set(void);
+#ifndef CONFIG_FB_MSM_MDP40
+static inline void mdp_dsi_cmd_overlay_suspend(void)
+{
+	/* empty */
 }
 #endif
 
