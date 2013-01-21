@@ -28,6 +28,7 @@
 #include <asm/system.h>
 #include <asm/mach-types.h>
 #include <mach/hardware.h>
+#include <mach/iommu_domains.h>
 #include "mdp.h"
 #include "msm_fb.h"
 #include "mdp4.h"
@@ -380,6 +381,9 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 {
 	uint32 isr, mask, panel;
 	struct mdp_dma_data *dma;
+	struct mdp_hist_mgmt *mgmt = NULL;
+	char *base_addr;
+	int i, ret;
 
 	mdp_is_in_isr = TRUE;
 
@@ -401,10 +405,17 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 		/* When underun occurs mdp clear the histogram registers
 		that are set before in hw_init so restore them back so
 		that histogram works.*/
-		MDP_OUTP(MDP_BASE + 0x95010, 1);
-		outpdw(MDP_BASE + 0x9501c, INTR_HIST_DONE);
-		mdp_is_hist_valid = FALSE;
-		__mdp_histogram_reset();
+		for (i = 0; i < MDP_HIST_MGMT_MAX; i++) {
+			mgmt = mdp_hist_mgmt_array[i];
+			if (!mgmt)
+				continue;
+			base_addr = MDP_BASE + mgmt->base;
+			MDP_OUTP(base_addr + 0x010, 1);
+			outpdw(base_addr + 0x01c, INTR_HIST_DONE |
+						INTR_HIST_RESET_SEQ_DONE);
+			mgmt->mdp_is_hist_valid = FALSE;
+			__mdp_histogram_reset(mgmt);
+		}
     	if(1 == Uderrunflag) {
   	        Uderrunflag = 0;
 	 	    queue_work(gUderrunWorkqueue, &gUderrunWork);
@@ -531,7 +542,7 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 			mdp_intr_mask &= ~INTR_DMA_P_DONE;
 			outp32(MDP_INTR_ENABLE, mdp_intr_mask);
 			dma->waiting = FALSE;
-			mdp4_dma_p_done_dsi_video();
+			mdp4_dma_p_done_dsi_video(dma);
 			spin_unlock(&mdp_spin_lock);
 		} else if (panel & MDP4_PANEL_DSI_CMD) {
 			mdp4_dma_p_done_dsi(dma);
@@ -582,24 +593,27 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 	}
 	if (isr & INTR_DMA_P_HISTOGRAM) {
 		mdp4_stat.intr_histogram++;
-		isr = inpdw(MDP_DMA_P_HIST_INTR_STATUS);
-		mask = inpdw(MDP_DMA_P_HIST_INTR_ENABLE);
-		outpdw(MDP_DMA_P_HIST_INTR_CLEAR, isr);
-		mb();
-		isr &= mask;
-		if (isr & INTR_HIST_RESET_SEQ_DONE)
-			__mdp_histogram_kickoff();
-
-		if (isr & INTR_HIST_DONE) {
-			if (waitqueue_active(&mdp_hist_comp.wait)) {
-				if (!queue_work(mdp_hist_wq,
-						&mdp_histogram_worker)) {
-					pr_err("%s - can't queue hist_read\n",
-							__func__);
-				}
-			} else
-				__mdp_histogram_reset();
-		}
+		ret = mdp_histogram_block2mgmt(MDP_BLOCK_DMA_P, &mgmt);
+		if (!ret)
+			mdp_histogram_handle_isr(mgmt);
+	}
+	if (isr & INTR_DMA_S_HISTOGRAM) {
+		mdp4_stat.intr_histogram++;
+		ret = mdp_histogram_block2mgmt(MDP_BLOCK_DMA_S, &mgmt);
+		if (!ret)
+			mdp_histogram_handle_isr(mgmt);
+	}
+	if (isr & INTR_VG1_HISTOGRAM) {
+		mdp4_stat.intr_histogram++;
+		ret = mdp_histogram_block2mgmt(MDP_BLOCK_VG_1, &mgmt);
+		if (!ret)
+			mdp_histogram_handle_isr(mgmt);
+	}
+	if (isr & INTR_VG2_HISTOGRAM) {
+		mdp4_stat.intr_histogram++;
+		ret = mdp_histogram_block2mgmt(MDP_BLOCK_VG_2, &mgmt);
+		if (!ret)
+			mdp_histogram_handle_isr(mgmt);
 	}
 
 out:
@@ -2566,7 +2580,7 @@ u32 mdp4_allocate_writeback_buf(struct msm_fb_data_type *mfd, u32 mix_num)
 {
 	struct mdp_buf_type *buf;
 	ion_phys_addr_t	addr;
-	u32 len;
+	unsigned long len;
 
 	if (mix_num == MDP4_MIXER0)
 		buf = mfd->ov0_wb_buf;
@@ -2582,14 +2596,15 @@ u32 mdp4_allocate_writeback_buf(struct msm_fb_data_type *mfd, u32 mix_num)
 	}
 
 	if (!IS_ERR_OR_NULL(mfd->iclient)) {
-		pr_info("%s:%d ion based allocation\n", __func__, __LINE__);
-		buf->ihdl = ion_alloc(mfd->iclient, buf->size, 4,
-			(1 << mfd->mem_hid));
+		pr_info("%s:%d ion based allocation mfd->mem_hid 0x%x\n",
+			__func__, __LINE__, mfd->mem_hid);
+		buf->ihdl = ion_alloc(mfd->iclient, buf->size, SZ_4K,
+			mfd->mem_hid);
 		if (!IS_ERR_OR_NULL(buf->ihdl)) {
-			if (ion_phys(mfd->iclient, buf->ihdl,
-				&addr, &len)) {
-				pr_err("%s:%d: ion_phys map failed\n",
-					__func__, __LINE__);
+			if (ion_map_iommu(mfd->iclient, buf->ihdl,
+				DISPLAY_DOMAIN, GEN_POOL, SZ_4K, 0, &addr,
+				&len, 0, 0)) {
+				pr_err("ion_map_iommu() failed\n");
 				return -ENOMEM;
 			}
 		} else {
@@ -2624,6 +2639,8 @@ void mdp4_free_writeback_buf(struct msm_fb_data_type *mfd, u32 mix_num)
 
 	if (!IS_ERR_OR_NULL(mfd->iclient)) {
 		if (!IS_ERR_OR_NULL(buf->ihdl)) {
+			ion_unmap_iommu(mfd->iclient, buf->ihdl,
+				DISPLAY_DOMAIN, GEN_POOL);
 			ion_free(mfd->iclient, buf->ihdl);
 			pr_info("%s:%d free writeback imem\n", __func__,
 				__LINE__);
