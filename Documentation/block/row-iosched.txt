@@ -1,0 +1,134 @@
+Introduction	1
+============	2
+3
+The ROW scheduling algorithm will be used in mobile devices as default	4
+block layer IO scheduling algorithm. ROW stands for "READ Over WRITE"	5
+which is the main requests dispatch policy of this algorithm.	6
+7
+The ROW IO scheduler was developed with the mobile devices needs in	8
+mind. In mobile devices we favor user experience upon everything else,	9
+thus we want to give READ IO requests as much priority as possible.	10
+The main idea of the ROW scheduling policy is just that:	11
+- If there are READ requests in pipe - dispatch them, while write	12
+starvation is considered.	13
+14
+Software description	15
+====================	16
+The elevator defines a registering mechanism for different IO scheduler	17
+to implement. This makes implementing a new algorithm quite straight	18
+forward and requires almost no changes to block/elevator framework. A	19
+new IO scheduler just has to implement a set of callback functions	20
+defined by the elevator.	21
+These callbacks cover all the required IO operations such as	22
+adding/removing request to/from the scheduler, merging two requests,	23
+dispatching a request etc.	24
+25
+Design	26
+======	27
+28
+The requests are kept in queues according to their priority. The	29
+dispatching of requests is done in a Round Robin manner with a	30
+different slice for each queue. The dispatch quantum for a specific	31
+queue is set according to the queues priority. READ queues are	32
+given bigger dispatch quantum than the WRITE queues, within a dispatch	33
+cycle.	34
+35
+At the moment there are 6 types of queues the requests are	36
+distributed to:	37
+-»       High priority READ queue	38
+-»       High priority Synchronous WRITE queue	39
+-»       Regular priority READ queue	40
+-»       Regular priority Synchronous WRITE queue	41
+-»       Regular priority WRITE queue	42
+-»       Low priority READ queue	43
+44
+The marking of request as high/low priority will be done by the	45
+application adding the request and not the scheduler. See TODO section.	46
+If the request is not marked in any way (high/low) the scheduler	47
+assigns it to one of the regular priority queues:	48
+read/write/sync write.	49
+50
+If in a certain dispatch cycle one of the queues was empty and didn't	51
+use its quantum that queue will be marked as "un-served". If we're in	52
+a middle of a dispatch cycle dispatching from queue Y and a request	53
+arrives for queue X that was un-served in the previous cycle, if X's	54
+priority is higher than Y's, queue X will be preempted in the favor of	55
+queue Y.	56
+57
+For READ request queues ROW IO scheduler allows idling within a	58
+dispatch quantum in order to give the application a chance to insert	59
+more requests. Idling means adding some extra time for serving a	60
+certain queue even if the queue is empty. The idling is enabled if	61
+the ROW IO scheduler identifies the application is inserting requests	62
+in a high frequency.	63
+Not all queues can idle. ROW scheduler exposes an enablement struct	64
+for idling.	65
+For idling on READ queues, the ROW IO scheduler uses timer mechanism.	66
+When the timer expires we schedule a delayed work that will signal the	67
+device driver to fetch another request for dispatch.	68
+69
+ROW scheduler will support additional services for block devices that	70
+supports Urgent Requests. That is, the scheduler may inform the	71
+device driver upon urgent requests using a newly defined callback.	72
+In addition it will support rescheduling of requests that were	73
+interrupted. For example if the device driver issues a long write	74
+request and a sudden urgent request is received by the scheduler.	75
+The scheduler will inform the device driver about the urgent request,	76
+so the device driver can stop the current write request and serve the	77
+urgent request. In such a case the device driver may also insert back	78
+to the scheduler the remainder of the interrupted write request, such	79
+that the scheduler may continue sending urgent requests without the	80
+need to interrupt the ongoing write again and again. The write	81
+remainder will be sent later on according to the scheduler policy.	82
+83
+SMP/multi-core	84
+==============	85
+At the moment the code is accessed from 2 contexts:	86
+- Application context (from block/elevator layer): adding the requests.	87
+- device driver thread: dispatching the requests and notifying on	88
+  completion.	89
+90
+One lock is used to synchronize between the two. This lock is provided	91
+by the block device driver along with the dispatch queue.	92
+93
+Config options	94
+==============	95
+1. hp_read_quantum: dispatch quantum for the high priority READ queue	96
+   (default is 100 requests)	97
+2. rp_read_quantum: dispatch quantum for the regular priority READ	98
+   queue (default is 100 requests)	99
+3. hp_swrite_quantum: dispatch quantum for the high priority	100
+   Synchronous WRITE queue (default is 2 requests)	101
+4. rp_swrite_quantum: dispatch quantum for the regular priority	102
+   Synchronous WRITE queue (default is 1 requests)	103
+5. rp_write_quantum: dispatch quantum for the regular priority WRITE	104
+   queue (default is 1 requests)	105
+6. lp_read_quantum: dispatch quantum for the low priority READ queue	106
+   (default is 1 requests)	107
+7. lp_swrite_quantum: dispatch quantum for the low priority Synchronous	108
+   WRITE queue (default is 1 requests)	109
+8. read_idle: how long to idle on read queue in Msec (in case idling	110
+   is enabled on that queue). (default is 5 Msec)	111
+9. read_idle_freq: frequency of inserting READ requests that will	112
+   trigger idling. This is the time in Msec between inserting two READ	113
+   requests. (default is 8 Msec)	114
+115
+Note: Dispatch quantum is number of requests that will be dispatched	116
+from a certain queue in a dispatch cycle.	117
+118
+To do	119
+=====	120
+The ROW algorithm takes the scheduling policy one step further, making	121
+it a bit more "user-needs oriented", by allowing the application to	122
+hint on the urgency of its requests. For example: even among the READ	123
+requests several requests may be more urgent for completion than other.	124
+The former will go to the High priority READ queue, that is given the	125
+bigger dispatch quantum than any other queue.	126
+127
+Still need to design the way applications will "hint" on the urgency of	128
+their requests. May be done by ioctl(). We need to look into concrete	129
+use-cases in order to determine the best solution for this.	130
+This will be implemented as a second phase.	131
+132
+Design and implement additional services for block devices that	133
+			supports High Priority Requests.
