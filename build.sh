@@ -4,7 +4,7 @@ ramdisk_dir=/home/aftersilence/ramdisk.cpio.gz
 
 export ARCH=arm
 export SUBARCH=arm
-export CROSS_COMPILE=../toolchain/bin/arm-eabi-
+export CROSS_COMPILE=../toolchain/bin/arm-cortex_a8-linux-gnueabi-
 
 make -j4
 
