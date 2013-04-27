@@ -25,8 +25,8 @@
 #include "vidc.h"
 #include "vcd_res_tracker.h"
 
-static unsigned int vidc_clk_table[4] = {
-	48000000, 133330000, 200000000, 228570000,
+static unsigned int vidc_clk_table[3] = {
+	48000000, 133330000, 200000000
 };
 static unsigned int restrk_mmu_subsystem[] =	{
 		MSM_SUBSYSTEM_VIDEO, MSM_SUBSYSTEM_VIDEO_FWARE};
@@ -416,9 +416,6 @@ int res_trk_update_bus_perf_level(struct vcd_dev_ctxt *dev_ctxt, u32 perf_level)
 	u32 enc_perf_level = 0, dec_perf_level = 0;
 	u32 bus_clk_index, client_type = 0;
 	int rc = 0;
-	bool turbo_enabled = false;
-	bool turbo_supported =
-		!resource_context.vidc_platform_data->disable_turbo;
 
 	cctxt_itr = dev_ctxt->cctxt_list_head;
 	while (cctxt_itr) {
@@ -426,37 +423,19 @@ int res_trk_update_bus_perf_level(struct vcd_dev_ctxt *dev_ctxt, u32 perf_level)
 			dec_perf_level += cctxt_itr->reqd_perf_lvl;
 		else
 			enc_perf_level += cctxt_itr->reqd_perf_lvl;
-
-		if (cctxt_itr->is_turbo_enabled)
-			turbo_enabled = true;
 		cctxt_itr = cctxt_itr->next;
 	}
-
 	if (!enc_perf_level)
 		client_type = 1;
 	if (perf_level <= RESTRK_1080P_VGA_PERF_LEVEL)
 		bus_clk_index = 0;
 	else if (perf_level <= RESTRK_1080P_720P_PERF_LEVEL)
 		bus_clk_index = 1;
-	else if (perf_level <= RESTRK_1080P_MAX_PERF_LEVEL)
-		bus_clk_index = 2;
 	else
-		bus_clk_index = 3;
+		bus_clk_index = 2;
 
 	if (dev_ctxt->reqd_perf_lvl + dev_ctxt->curr_perf_lvl == 0)
 		bus_clk_index = 2;
-	else if ((!turbo_supported || !turbo_enabled) && bus_clk_index == 3) {
-		if (!turbo_supported)
-			VCDRES_MSG_MED("Warning: Turbo mode not supported "\
-					" falling back to 1080p bus\n");
-		bus_clk_index = 2;
-	}
-
-	if (bus_clk_index == 3)
-		dev_ctxt->turbo_mode_set = true;
-	else
-		dev_ctxt->turbo_mode_set = false;
-
 	bus_clk_index = (bus_clk_index << 1) + (client_type + 1);
 	VCDRES_MSG_LOW("%s(), bus_clk_index = %d", __func__, bus_clk_index);
 	VCDRES_MSG_LOW("%s(),context.pcl = %x", __func__, resource_context.pcl);
@@ -471,21 +450,12 @@ u32 res_trk_set_perf_level(u32 req_perf_lvl, u32 *pn_set_perf_lvl,
 	struct vcd_dev_ctxt *dev_ctxt)
 {
 	u32 vidc_freq = 0;
-	bool turbo_supported =
-		!resource_context.vidc_platform_data->disable_turbo;
-
 	if (!pn_set_perf_lvl || !dev_ctxt) {
 		VCDRES_MSG_ERROR("%s(): NULL pointer! dev_ctxt(%p)\n",
 			__func__, dev_ctxt);
 		return false;
 	}
 	VCDRES_MSG_LOW("%s(), req_perf_lvl = %d", __func__, req_perf_lvl);
-
-	if (!turbo_supported && req_perf_lvl > RESTRK_1080P_MAX_PERF_LEVEL) {
-		VCDRES_MSG_ERROR("%s(): Turbo not supported! dev_ctxt(%p)\n",
-			__func__, dev_ctxt);
-	}
-
 #ifdef CONFIG_MSM_BUS_SCALING
 	if (!res_trk_update_bus_perf_level(dev_ctxt, req_perf_lvl) < 0) {
 		VCDRES_MSG_ERROR("%s(): update buf perf level failed\n",
@@ -503,23 +473,10 @@ u32 res_trk_set_perf_level(u32 req_perf_lvl, u32 *pn_set_perf_lvl,
 	} else if (req_perf_lvl <= RESTRK_1080P_720P_PERF_LEVEL) {
 		vidc_freq = vidc_clk_table[1];
 		*pn_set_perf_lvl = RESTRK_1080P_720P_PERF_LEVEL;
-	} else if (req_perf_lvl <= RESTRK_1080P_MAX_PERF_LEVEL) {
-		vidc_freq = vidc_clk_table[2];
-		*pn_set_perf_lvl = RESTRK_1080P_MAX_PERF_LEVEL;
 	} else {
-		vidc_freq = vidc_clk_table[3];
-		*pn_set_perf_lvl = RESTRK_1080P_TURBO_PERF_LEVEL;
-	}
-
-	if ((!turbo_supported || !dev_ctxt->turbo_mode_set) &&
-		 *pn_set_perf_lvl == RESTRK_1080P_TURBO_PERF_LEVEL) {
-		if (!turbo_supported)
-			VCDRES_MSG_ERROR("Warning: Turbo mode not supported "\
-					" falling back to 1080p clocks\n");
 		vidc_freq = vidc_clk_table[2];
 		*pn_set_perf_lvl = RESTRK_1080P_MAX_PERF_LEVEL;
 	}
-
 	resource_context.perf_level = *pn_set_perf_lvl;
 	VCDRES_MSG_MED("VIDC: vidc_freq = %u, req_perf_lvl = %u\n",
 		vidc_freq, req_perf_lvl);
@@ -638,9 +595,8 @@ void res_trk_init(struct device *device, u32 irq)
 			VIDC_FW_SIZE, DDL_KILO_BYTE(128))) {
 			pr_err("%s() Firmware buffer allocation failed",
 				   __func__);
-			if (!res_trk_check_for_sec_session())
-				memset(&resource_context.firmware_addr, 0,
-						sizeof(resource_context.firmware_addr));
+			memset(&resource_context.firmware_addr, 0,
+			   sizeof(resource_context.firmware_addr));
 		}
 	}
 }
@@ -663,17 +619,8 @@ u32 res_trk_get_firmware_addr(struct ddl_buf_addr *firm_addr)
 		return -EINVAL;
 	}
 	memcpy(firm_addr, &resource_context.firmware_addr,
-			sizeof(struct ddl_buf_addr));
+		sizeof(struct ddl_buf_addr));
 	return 0;
-}
-
-int res_trk_check_for_sec_session(void)
-{
-	int rc;
-	mutex_lock(&resource_context.secure_lock);
-	rc = resource_context.secure_session;
-	mutex_unlock(&resource_context.secure_lock);
-	return rc;
 }
 
 int res_trk_get_mem_type(void)
@@ -785,37 +732,33 @@ int res_trk_disable_iommu_clocks(void)
 	return 0;
 }
 
-void res_trk_secure_unset(void)
+int res_trk_check_for_sec_session()
 {
+	int rc;
 	mutex_lock(&resource_context.secure_lock);
-	resource_context.secure_session--;
+	rc = (resource_context.secure_session) ? -EBUSY : 0;
 	mutex_unlock(&resource_context.secure_lock);
+	return rc;
 }
-
-void res_trk_secure_set(void)
-{
-	mutex_lock(&resource_context.secure_lock);
-	resource_context.secure_session++;
-	mutex_unlock(&resource_context.secure_lock);
-}
-
 int res_trk_open_secure_session()
 {
 	int rc;
-
-	if (res_trk_check_for_sec_session() == 1) {
-		mutex_lock(&resource_context.secure_lock);
-		pr_err("Securing...\n");
-		rc = res_trk_enable_iommu_clocks();
-		if (rc) {
-			pr_err("IOMMU clock enabled failed while open");
-			goto error_open;
-		}
-		msm_ion_secure_heap(ION_HEAP(resource_context.memtype));
-		msm_ion_secure_heap(ION_HEAP(resource_context.cmd_mem_type));
-		res_trk_disable_iommu_clocks();
-		mutex_unlock(&resource_context.secure_lock);
+	mutex_lock(&resource_context.secure_lock);
+	if (resource_context.secure_session) {
+		pr_err("Secure session already open");
+		rc = -EBUSY;
+		goto error_open;
 	}
+	resource_context.secure_session = 1;
+	rc = res_trk_enable_iommu_clocks();
+	if (rc) {
+		pr_err("IOMMU clock enabled failed while open");
+		goto error_open;
+	}
+	msm_ion_secure_heap(ION_HEAP(resource_context.memtype));
+	msm_ion_secure_heap(ION_HEAP(resource_context.cmd_mem_type));
+	res_trk_disable_iommu_clocks();
+	mutex_unlock(&resource_context.secure_lock);
 	return 0;
 error_open:
 	mutex_unlock(&resource_context.secure_lock);
@@ -825,44 +768,19 @@ error_open:
 int res_trk_close_secure_session()
 {
 	int rc;
-	if (res_trk_check_for_sec_session() == 1) {
-		pr_err("Unsecuring....\n");
-		mutex_lock(&resource_context.secure_lock);
-		rc = res_trk_enable_iommu_clocks();
-		if (rc) {
-			pr_err("IOMMU clock enabled failed while close");
-			goto error_close;
-		}
-		msm_ion_unsecure_heap(ION_HEAP(resource_context.memtype));
-		msm_ion_unsecure_heap(ION_HEAP(resource_context.cmd_mem_type));
-		res_trk_disable_iommu_clocks();
-		mutex_unlock(&resource_context.secure_lock);
+	mutex_lock(&resource_context.secure_lock);
+	rc = res_trk_enable_iommu_clocks();
+	if (rc) {
+		pr_err("IOMMU clock enabled failed while close");
+		goto error_close;
 	}
+	msm_ion_unsecure_heap(ION_HEAP(resource_context.memtype));
+	msm_ion_unsecure_heap(ION_HEAP(resource_context.cmd_mem_type));
+	res_trk_disable_iommu_clocks();
+	resource_context.secure_session = 0;
+	mutex_unlock(&resource_context.secure_lock);
 	return 0;
 error_close:
 	mutex_unlock(&resource_context.secure_lock);
 	return rc;
-}
-
-u32 get_res_trk_perf_level(enum vcd_perf_level perf_level)
-{
-	u32 res_trk_perf_level;
-	switch (perf_level) {
-	case VCD_PERF_LEVEL0:
-		res_trk_perf_level = RESTRK_1080P_VGA_PERF_LEVEL;
-		break;
-	case VCD_PERF_LEVEL1:
-		res_trk_perf_level = RESTRK_1080P_720P_PERF_LEVEL;
-		break;
-	case VCD_PERF_LEVEL2:
-		res_trk_perf_level = RESTRK_1080P_MAX_PERF_LEVEL;
-		break;
-	case VCD_PERF_LEVEL_TURBO:
-		res_trk_perf_level = RESTRK_1080P_TURBO_PERF_LEVEL;
-		break;
-	default:
-		VCD_MSG_ERROR("Invalid perf level: %d\n", perf_level);
-		res_trk_perf_level = -EINVAL;
-	}
-	return res_trk_perf_level;
 }

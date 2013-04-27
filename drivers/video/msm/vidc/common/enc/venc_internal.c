@@ -1655,7 +1655,6 @@ u32 vid_enc_encode_frame(struct video_client_ctx *client_ctx,
 	int pmem_fd;
 	struct file *file;
 	s32 buffer_index = -1;
-	u32 ion_flag = 0;
 
 	u32 vcd_status = VCD_ERR_FAIL;
 
@@ -1686,18 +1685,6 @@ u32 vid_enc_encode_frame(struct video_client_ctx *client_ctx,
 
 		/* Rely on VCD using the same flags as OMX */
 		vcd_input_buffer.flags = input_frame_info->flags;
-
-		ion_flag = vidc_get_fd_info(client_ctx, BUFFER_TYPE_INPUT,
-				pmem_fd, kernel_vaddr, buffer_index);
-
-		if (vcd_input_buffer.data_len > 0) {
-			if (ion_flag == CACHED) {
-				clean_caches(
-				(unsigned long) vcd_input_buffer.virtual,
-				(unsigned long) vcd_input_buffer.data_len,
-				(phy_addr + input_frame_info->offset));
-			}
-		}
 
 		vcd_status = vcd_encode_frame(client_ctx->vcd_handle,
 		&vcd_input_buffer);
@@ -1769,7 +1756,6 @@ u32 vid_enc_set_recon_buffers(struct video_client_ctx *client_ctx,
 	size_t ion_len = -1;
 	unsigned long phy_addr;
 	int rc = -1;
-	unsigned long ionflag;
 	if (!client_ctx || !venc_recon) {
 		pr_err("%s() Invalid params", __func__);
 		return false;
@@ -1809,18 +1795,10 @@ u32 vid_enc_set_recon_buffers(struct video_client_ctx *client_ctx,
 			ERR("%s(): get_ION_handle failed\n", __func__);
 			goto ion_error;
 		}
-		rc = ion_handle_get_flags(client_ctx->user_ion_client,
-					client_ctx->recon_buffer_ion_handle[i],
-					&ionflag);
-		if (rc) {
-			ERR("%s():get_ION_flags fail\n",
-				 __func__);
-			goto ion_error;
-		}
 		control->kernel_virtual_addr = (u8 *) ion_map_kernel(
 			client_ctx->user_ion_client,
 			client_ctx->recon_buffer_ion_handle[i],
-			ionflag);
+			0);
 		if (!control->kernel_virtual_addr) {
 			ERR("%s(): get_ION_kernel virtual addr fail\n",
 				 __func__);
