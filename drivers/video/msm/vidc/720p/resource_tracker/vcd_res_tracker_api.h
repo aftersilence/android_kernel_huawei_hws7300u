@@ -35,4 +35,7 @@ void res_trk_set_mem_type(enum ddl_mem_area mem_type);
 int res_trk_check_for_sec_session(void);
 int res_trk_open_secure_session(void);
 int res_trk_close_secure_session(void);
+void res_trk_secure_set(void);
+void res_trk_secure_unset(void);
+u32 get_res_trk_perf_level(enum vcd_perf_level perf_level);
 #endif
