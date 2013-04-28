@@ -361,6 +361,10 @@ uint32 mdp4_overlay_panel_list(void)
 	return ctrl->panel_mode;
 }
 
+#ifdef HDMI_VIDEO_QUANTIZATION_ISSUE
+extern void video_quantization_setting(void);
+#endif
+
 void mdp4_overlay_cfg_init(void)
 {
 	if (ctrl->hw_version == 0) {
@@ -3148,12 +3152,6 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 		mdp4_hsic_set(pipe, &(req->dpp));
 
 	mdp4_stat.overlay_set[pipe->mixer_num]++;
-
-	if (ctrl->panel_mode & MDP4_PANEL_MDDI) {
-		if (mdp_hw_revision == MDP4_REVISION_V2_1 &&
-			pipe->mixer_num == MDP4_MIXER0)
-			mdp4_overlay_status_write(MDP4_OVERLAY_TYPE_SET, true);
-	}
 
 	mdp4_overlay_mdp_pipe_req(pipe, mfd);
 
