@@ -3436,26 +3436,13 @@ static void __init msm8x60_init_dsps(void)
 }
 #endif /* CONFIG_MSM_DSPS */
 
-/*Begin: modified by z00176551 20110429 for LCD display*/
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
-#if S7_HWID_L3H(S7, S7301, T0)
 #define MSM_FB_PRIM_BUF_SIZE \
                (roundup((1280 * 800 * 4), 4096) * 3) /* 4 bpp x 3 pages */
 #else
 #define MSM_FB_PRIM_BUF_SIZE \
-               (roundup((1024 * 600 * 4), 4096) * 3) /* 4 bpp x 3 pages */
-#endif
-#else
-#if S7_HWID_L3H(S7, S7301, T0)
-/* s7pro = 1280 x 800 x 4(bpp) x 2(pages) */
-#define MSM_FB_PRIM_BUF_SIZE \
                (roundup((1280 * 800 * 4), 4096) * 2) /* 4 bpp x 2 pages */
-#else
-#define MSM_FB_PRIM_BUF_SIZE \
-               (roundup((1024 * 600 * 4), 4096) * 2) /* 4 bpp x 2 pages */
 #endif
-#endif
-/*End: modified by z00176551 20110429 for LCD display*/
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 #define MSM_FB_EXT_BUF_SIZE  \
@@ -3471,7 +3458,7 @@ static void __init msm8x60_init_dsps(void)
 #define MSM_FB_SIZE roundup(MSM_FB_PRIM_BUF_SIZE + MSM_FB_EXT_BUF_SIZE + \
 				MSM_FB_DSUB_PMEM_ADDER, 4096)
 
-#define MSM_PMEM_SF_SIZE 0x8000000 /* 64 Mbytes */
+#define MSM_PMEM_SF_SIZE 0x8000000 /* 128 Mbytes */
 #define MSM_HDMI_PRIM_PMEM_SF_SIZE 0x4000000 /* 64 Mbytes */
 
 #ifdef CONFIG_FB_MSM_HDMI_AS_PRIMARY
@@ -3481,13 +3468,13 @@ unsigned char hdmi_is_primary;
 #endif
 
 #ifdef CONFIG_FB_MSM_OVERLAY0_WRITEBACK
-#define MSM_FB_OVERLAY0_WRITEBACK_SIZE roundup((1376 * 768 * 3 * 2), 4096)
+#define MSM_FB_OVERLAY0_WRITEBACK_SIZE roundup((1280 * 800 * 3 * 2), 4096)
 #else
 #define MSM_FB_OVERLAY0_WRITEBACK_SIZE (0)
 #endif  /* CONFIG_FB_MSM_OVERLAY0_WRITEBACK */
 
 #ifdef CONFIG_FB_MSM_OVERLAY1_WRITEBACK
-#define MSM_FB_OVERLAY1_WRITEBACK_SIZE roundup((1920 * 1088 * 3 * 2), 4096)
+#define MSM_FB_OVERLAY1_WRITEBACK_SIZE roundup((1920 * 1080 * 3 * 2), 4096)
 #else
 #define MSM_FB_OVERLAY1_WRITEBACK_SIZE (0)
 #endif  /* CONFIG_FB_MSM_OVERLAY1_WRITEBACK */
@@ -3500,7 +3487,7 @@ unsigned char hdmi_is_primary;
 #define MSM_SMI_SIZE          0x4000000
 
 #define KERNEL_SMI_BASE       (MSM_SMI_BASE)
-#define KERNEL_SMI_SIZE  0x600000 /* fixed by S7 */
+#define KERNEL_SMI_SIZE       0x600000
 
 #define USER_SMI_BASE         (KERNEL_SMI_BASE + KERNEL_SMI_SIZE)
 #define USER_SMI_SIZE         (MSM_SMI_SIZE - KERNEL_SMI_SIZE)
@@ -6967,7 +6954,6 @@ static struct platform_device ion_dev = {
 };
 #endif
 
-
 static struct memtype_reserve msm8x60_reserve_table[] __initdata = {
 	/* Kernel SMI memory pool for video core, used for firmware */
 	/* and encoder, decoder scratch buffers */
@@ -7083,7 +7069,7 @@ static void __init msm8x60_calculate_reserve_sizes(void)
 
 static int msm8x60_paddr_to_memtype(unsigned int paddr)
 {
-	if (paddr >= 0x40000000 && paddr < 0x60000000)
+	if (paddr >= 0x40000000 && paddr < 0x80000000)
 		return MEMTYPE_EBI1;
 	if (paddr >= 0x38000000 && paddr < 0x40000000)
 		return MEMTYPE_SMI;
