@@ -32,10 +32,6 @@
 #include "mdp.h"
 #include "msm_fb.h"
 #include "mdp4.h"
-#include <linux/workqueue.h>
-static struct workqueue_struct *gUderrunWorkqueue;
-static struct work_struct gUderrunWork;
-
 
 struct mdp4_statistic mdp4_stat;
 
@@ -245,8 +241,6 @@ void mdp4_fetch_cfg(uint32 core_clk)
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 }
 
-int Uderrunflag = 1;
-
 void mdp4_hw_init(void)
 {
 	ulong bits;
@@ -328,13 +322,7 @@ void mdp4_hw_init(void)
 		outpdw(MDP_BASE + 0x003c, 1);
 
 	/* MDP cmd block disable */
-	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
-	gUderrunWorkqueue = create_singlethread_workqueue("uderrun_wq");
-	if (!gUderrunWorkqueue)    
-	{
-		printk(KERN_INFO "create hdmi_wq error\n");
-		return;
-	}		
+	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);	
 }
 
 
@@ -402,10 +390,6 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 				continue;
 			mgmt->mdp_is_hist_valid = FALSE;
 		}
-    	if(1 == Uderrunflag) {
-  	        Uderrunflag = 0;
-	 	    queue_work(gUderrunWorkqueue, &gUderrunWork);
-	    }
 	}
 
 	if (isr & INTR_EXTERNAL_INTF_UDERRUN) {
@@ -2613,7 +2597,7 @@ void mdp4_free_writeback_buf(struct msm_fb_data_type *mfd, u32 mix_num)
 	} else {
 		if (buf->write_addr) {
 			free_contiguous_memory_by_paddr(buf->write_addr);
-			pr_info("%s:%d free writeback pmem\n", __func__,
+			pr_debug("%s:%d free writeback pmem\n", __func__,
 				__LINE__);
 		}
 	}

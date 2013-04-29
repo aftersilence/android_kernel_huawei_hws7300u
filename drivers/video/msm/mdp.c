@@ -1857,7 +1857,6 @@ void mdp_histogram_handle_isr(struct mdp_hist_mgmt *mgmt)
 	isr &= mask;
 	if (isr & INTR_HIST_RESET_SEQ_DONE)
 		__mdp_histogram_kickoff(mgmt);
-
 	else if (isr & INTR_HIST_DONE)
 		queue_work(mdp_hist_wq, &mgmt->mdp_histogram_worker);
 }
@@ -1969,7 +1968,6 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 			} else {
 				vsync_isr_handler();
 			}
-
 			spin_unlock_irqrestore(&mdp_spin_lock, flag);
 
 			if (!vsync_isr)
@@ -1987,6 +1985,7 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 				      TRUE);
 			complete(&dma->comp);
 		}
+
 		/* DMA_E LCD-Out Complete */
 		if (mdp_interrupt & MDP_DMA_E_DONE) {
 			dma = &dma_s_data;
@@ -2014,8 +2013,6 @@ irqreturn_t mdp_isr(int irq, void *ptr)
         dma->busy = FALSE;
         spin_unlock_irqrestore(&mdp_spin_lock, flag);
         mdp_pipe_ctrl(MDP_DMA2_BLOCK, MDP_BLOCK_POWER_OFF, TRUE);
-
-
         complete(&dma->comp);
 #else
 		if (mdp_prim_panel_type == MIPI_CMD_PANEL) {
@@ -2510,7 +2507,6 @@ static int mdp_probe(struct platform_device *pdev)
 #ifdef CONFIG_FB_MSM_OVERLAY
 		mdp_hw_cursor_init();
 #endif
-
 			mdp_clk_ctrl(0);
 
 		mdp_resource_initialized = 1;

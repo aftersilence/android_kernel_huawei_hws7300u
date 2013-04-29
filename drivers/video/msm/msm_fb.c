@@ -49,11 +49,6 @@
 #include "mdp4.h"
 #include "external_common.h"
 
-#ifdef CONFIG_FB_MSM_LOGO
-#define INIT_IMAGE_FILE "/initlogo.rle"
-extern int load_565rle_image(char *filename, bool bf_supported);
-#endif
-
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MSM_FB_NUM	3
 #endif
@@ -695,8 +690,7 @@ static struct dev_pm_ops msm_fb_dev_pm_ops = {
 	.runtime_suspend = msm_fb_runtime_suspend,
 	.runtime_resume = msm_fb_runtime_resume,
 	.runtime_idle = msm_fb_runtime_idle,
-#if (defined(CONFIG_SUSPEND) && defined(CONFIG_FB_MSM_HDMI_MSM_PANEL) && \
-	!defined(CONFIG_FB_MSM_HDMI_AS_PRIMARY))
+#if (defined(CONFIG_SUSPEND) && defined(CONFIG_FB_MSM_HDMI_MSM_PANEL))
 	.suspend = msm_fb_ext_suspend,
 	.resume = msm_fb_ext_resume,
 #endif

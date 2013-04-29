@@ -44,8 +44,6 @@ int first_pixel_start_y;
 
 static int lcdc_enabled;
 
-extern int Uderrunflag;
-
 #define MAX_CONTROLLER	1
 
 static struct vsycn_ctrl {
