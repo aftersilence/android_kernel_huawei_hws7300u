@@ -99,7 +99,7 @@ static struct delayed_work mdp_pipe_ctrl_worker;
 
 static boolean mdp_suspended = FALSE;
 ulong mdp4_display_intf;
-static DEFINE_MUTEX(mdp_suspend_mutex);
+DEFINE_MUTEX(mdp_suspend_mutex);
 
 #ifdef CONFIG_FB_MSM_MDP40
 struct mdp_dma_data dma2_data;
@@ -2456,6 +2456,7 @@ static int mdp_probe(struct platform_device *pdev)
 	struct msm_fb_panel_data *pdata = NULL;
 	int rc;
 	resource_size_t  size ;
+	struct msm_panel_info *pinfo = NULL;
 	unsigned long flag;
 	u32 frame_rate;
 #ifdef CONFIG_FB_MSM_MDP40
@@ -2870,6 +2871,21 @@ static int mdp_probe(struct platform_device *pdev)
 
 	/* set driver data */
 	platform_set_drvdata(msm_fb_dev, mfd);
+
+	/* panel detection */
+	MSM_FB_INFO("mdp_probe: panel_detect function\n");
+	if (pdata && pdata->panel_detect && pdata->update_panel) {
+		rc = panel_next_on(msm_fb_dev);
+		if (!rc) {
+			pinfo = pdata->panel_detect(mfd);
+			rc = panel_next_off(msm_fb_dev);
+			}
+		if (!rc && pinfo)
+			mfd->panel_info = *pinfo;
+		pdata->update_panel(pdev);
+	} else {
+		MSM_FB_INFO("mdp_probe: no panel_detect function\n");
+	}
 
 	rc = platform_device_add(msm_fb_dev);
 	if (rc) {

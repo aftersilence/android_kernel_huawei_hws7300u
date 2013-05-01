@@ -3095,7 +3095,8 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 	}
 
 	if (info->node != 0 || mfd->cont_splash_done)	/* primary */
-		if (!mfd->panel_power_on)		/* suspended */
+		if (!mfd->panel_power_on ||
+			mdp_check_suspended()) /* suspended */
 			return -EPERM;
 
 	if (req->src.format == MDP_FB_FORMAT)
@@ -3372,7 +3373,7 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 	if (mfd == NULL)
 		return -ENODEV;
 
-	if (!mfd->panel_power_on) /* suspended */
+	if (!mfd->panel_power_on || mdp_check_suspended()) /* suspended */
 		return -EPERM;
 
 	pipe = mdp4_overlay_ndx2pipe(req->id);
@@ -3776,7 +3777,6 @@ done:
 	mutex_unlock(&mfd->dma->ov_mutex);
 	return err;
 }
-
 int mdp4_update_base_blend(struct msm_fb_data_type *mfd,
 			struct mdp_blend_cfg *mdp_blend_cfg)
 {

@@ -53,6 +53,9 @@
 #define MSM_FB_NUM	3
 #endif
 
+/*  Idle wakelock to prevent PC between wake up and Vsync */
+struct wake_lock mdp_idle_wakelock;
+
 static unsigned char *fbram;
 static unsigned char *fbram_phys;
 static int fbram_size;
@@ -442,6 +445,10 @@ static int msm_fb_remove(struct platform_device *pdev)
 	complete(&mfd->msmfb_no_update_notify);
 	complete(&mfd->msmfb_update_notify);
 
+	/* Do this only for the primary panel */
+	if (mfd->fbi->node == 0)
+		wake_lock_destroy(&mdp_idle_wakelock);
+
 	/* remove /dev/fb* */
 	unregister_framebuffer(mfd->fbi);
 
@@ -725,8 +732,6 @@ static void msmfb_early_suspend(struct early_suspend *h)
 {
 	struct msm_fb_data_type *mfd = container_of(h, struct msm_fb_data_type,
 						early_suspend);
-	struct msm_fb_panel_data *pdata = NULL;
-
 #if defined(CONFIG_FB_MSM_MDP303)
 	/*
 	* For MDP with overlay, set framebuffer with black pixels
@@ -744,37 +749,12 @@ static void msmfb_early_suspend(struct early_suspend *h)
 	}
 #endif
 	msm_fb_suspend_sub(mfd);
-
-	pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
-	if (hdmi_prim_display &&
-		(mfd->panel_info.type == HDMI_PANEL ||
-		 mfd->panel_info.type == DTV_PANEL)) {
-		/* Turn off the HPD circuitry */
-		if (pdata->power_ctrl) {
-			MSM_FB_INFO("%s: Turning off HPD circuitry\n",
-				__func__);
-			pdata->power_ctrl(FALSE);
-		}
-	}
 }
 
 static void msmfb_early_resume(struct early_suspend *h)
 {
 	struct msm_fb_data_type *mfd = container_of(h, struct msm_fb_data_type,
 						early_suspend);
-	struct msm_fb_panel_data *pdata = NULL;
-
-	pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
-	if (hdmi_prim_display &&
-		(mfd->panel_info.type == HDMI_PANEL ||
-		 mfd->panel_info.type == DTV_PANEL)) {
-		/* Turn on the HPD circuitry */
-		if (pdata->power_ctrl) {
-			MSM_FB_INFO("%s: Turning on HPD circuitry\n", __func__);
-			pdata->power_ctrl(TRUE);
-		}
-	}
-
 	msm_fb_resume_sub(mfd);
 }
 #endif
@@ -828,6 +808,8 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 	case FB_BLANK_UNBLANK:
 		if (!mfd->panel_power_on) {
 			msleep(16);
+			if (pdata->controller_on_panel_on)
+				pdata->power_on_panel_at_pan = 1;
 			ret = pdata->on(mfd->pdev);
 			if (ret == 0) {
 				mfd->panel_power_on = TRUE;
@@ -1413,6 +1395,9 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 		return -EPERM;
 	}
 
+	if (fbi->node == 0)
+		wake_lock_init(&mdp_idle_wakelock, WAKE_LOCK_IDLE, "mdp");
+
 	fbram += fix->smem_len;
 	fbram_phys += fix->smem_len;
 	fbram_size -= fix->smem_len;
@@ -1440,6 +1425,7 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 		register_early_suspend(&mfd->early_suspend);
 	}
 #endif
+
 
 #ifdef MSM_FB_ENABLE_DBGFS
 	{
@@ -1639,7 +1625,8 @@ static int msm_fb_pan_display(struct fb_var_screeninfo *var,
 	struct mdp_dirty_region dirty;
 	struct mdp_dirty_region *dirtyPtr = NULL;
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
-	struct msm_fb_panel_data *pdata;
+	struct msm_fb_panel_data *pdata =
+		(struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
 
 	/*
 	 * If framebuffer is 2, io pen display is not allowed.
@@ -1720,10 +1707,21 @@ static int msm_fb_pan_display(struct fb_var_screeninfo *var,
 		}
 	}
 
+	if (pdata && pdata->power_on_panel_at_pan) {
+		/* No vsync allowed at first pan since it will hang
+		   during dma transfer */
+		mdp_set_dma_pan_info(info, dirtyPtr, FALSE);
+	} else {
 	mdp_set_dma_pan_info(info, dirtyPtr,
 			     (var->activate == FB_ACTIVATE_VBL));
+	}
 	mdp_dma_pan_update(info);
 	up(&msm_fb_pan_sem);
+
+	if (pdata && pdata->power_on_panel_at_pan) {
+		(void)pdata->controller_on_panel_on(mfd->pdev);
+		pdata->power_on_panel_at_pan = 0;
+	}
 
 	if (unset_bl_level && !bl_updated) {
 		pdata = (struct msm_fb_panel_data *)mfd->pdev->
@@ -1920,6 +1918,7 @@ static int msm_fb_set_par(struct fb_info *info)
 		mfd->var_pixclock = var->pixclock;
 		blank = 1;
 	}
+
 	pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
 	if (pdata && pdata->panel_info.pdest == DISPLAY_2) {
 		if (var->reserved[3] &&
@@ -2903,7 +2902,8 @@ static int msmfb_overlay_play(struct fb_info *info, unsigned long *argp)
 	int	ret;
 	struct msmfb_overlay_data req;
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
-	struct msm_fb_panel_data *pdata;
+	struct msm_fb_panel_data *pdata =
+		(struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
 
 	if (mfd->overlay_play_enable == 0)	/* nothing to do */
 		return 0;
@@ -2933,6 +2933,11 @@ static int msmfb_overlay_play(struct fb_info *info, unsigned long *argp)
 	}
 
 	ret = mdp4_overlay_play(info, &req);
+
+	if (pdata && pdata->power_on_panel_at_pan) {
+		(void)pdata->controller_on_panel_on(mfd->pdev);
+		pdata->power_on_panel_at_pan = 0;
+	}
 
 	if (unset_bl_level && !bl_updated) {
 		pdata = (struct msm_fb_panel_data *)mfd->pdev->
@@ -3738,6 +3743,9 @@ struct platform_device *msm_fb_add_device(struct platform_device *pdev)
 	mfd->iclient = iclient;
 	/* link to the latest pdev */
 	mfd->pdev = this_dev;
+
+	/* link to the panel pdev */
+	mfd->panel_pdev = pdev;
 
 	mfd_list[mfd_list_index++] = mfd;
 	fbi_list[fbi_list_index++] = fbi;
