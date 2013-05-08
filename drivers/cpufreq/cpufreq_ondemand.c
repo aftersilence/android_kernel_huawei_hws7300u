@@ -868,14 +868,11 @@ bail_acq_sema_failed:
 	return;
 }
 
+#if 0
 static void dbs_input_event(struct input_handle *handle, unsigned int type,
 		unsigned int code, int value)
 {
 	int i;
-
-#if 1 /* samsung feature */
-	int found = 0;
-#endif
 
 	if ((dbs_tuners_ins.powersave_bias == POWERSAVE_BIAS_MAXLEVEL) ||
 		(dbs_tuners_ins.powersave_bias == POWERSAVE_BIAS_MINLEVEL)) {
@@ -883,19 +880,6 @@ static void dbs_input_event(struct input_handle *handle, unsigned int type,
 		return;
 	}
 
-#if 1 /* samsung feature */
-	/* only sec touchevent */
-	if (!strncmp(handle->dev->name,
-			"sec_touchscreen", strlen("sec_touchscreen"))) {
-		found = 1;
-	} else if (!strncmp(handle->dev->name,
-			"sec_e-pen", strlen("sec_e-pen"))) {
-		found = 1;
-	}
-
-	if(!found)
-		return;
-#endif
 	i = 0;
 /*	for_each_online_cpu(i) */{
 		queue_work_on(i, input_wq, &per_cpu(dbs_refresh_work, i));
@@ -951,6 +935,7 @@ static struct input_handler dbs_input_handler = {
 	.name		= "cpufreq_ond",
 	.id_table	= dbs_ids,
 };
+#endif
 
 static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 				   unsigned int event)
