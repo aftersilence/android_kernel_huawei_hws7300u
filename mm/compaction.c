@@ -35,7 +35,7 @@ struct compact_control {
 	unsigned long migrate_pfn;	/* isolate_migratepages search base */
 	bool sync;			/* Synchronous migration */
 
-	int order;			/* order a direct compactor needs */
+	unsigned int order;		/* order a direct compactor needs */
 	int migratetype;		/* MOVABLE, RECLAIMABLE etc */
 	struct zone *zone;
 };
@@ -676,75 +676,51 @@ unsigned long try_to_compact_pages(struct zonelist *zonelist,
 
 
 /* Compact all zones within a node */
-static int __compact_pgdat(pg_data_t *pgdat, struct compact_control *cc)
+static int compact_node(int nid, bool sync)
 {
 	int zoneid;
+	pg_data_t *pgdat;
 	struct zone *zone;
 
+	if (nid < 0 || nid >= nr_node_ids || !node_online(nid))
+		return -EINVAL;
+	pgdat = NODE_DATA(nid);
+
+	/* Flush pending updates to the LRU lists */
+	lru_add_drain_all();
+
 	for (zoneid = 0; zoneid < MAX_NR_ZONES; zoneid++) {
+		struct compact_control cc = {
+			.nr_freepages = 0,
+			.nr_migratepages = 0,
+			.order = -1,
+      .sync = sync,
+		};
 
 		zone = &pgdat->node_zones[zoneid];
 		if (!populated_zone(zone))
 			continue;
 
-		cc->nr_freepages = 0;
-		cc->nr_migratepages = 0;
-		cc->zone = zone;
-		INIT_LIST_HEAD(&cc->freepages);
-		INIT_LIST_HEAD(&cc->migratepages);
+		cc.zone = zone;
+		INIT_LIST_HEAD(&cc.freepages);
+		INIT_LIST_HEAD(&cc.migratepages);
 
-		if (cc->order == -1 || !compaction_deferred(zone, cc->order))
-			compact_zone(zone, cc);
+		compact_zone(zone, &cc);
 
-		if (cc->order > 0) {
-			int ok = zone_watermark_ok(zone, cc->order,
-						low_wmark_pages(zone), 0, 0);
-			if (ok && cc->order > zone->compact_order_failed)
-				zone->compact_order_failed = cc->order + 1;
-			/* Currently async compaction is never deferred. */
-			else if (!ok && cc->sync)
-				defer_compaction(zone, cc->order);
-		}
-
-		VM_BUG_ON(!list_empty(&cc->freepages));
-		VM_BUG_ON(!list_empty(&cc->migratepages));
+		VM_BUG_ON(!list_empty(&cc.freepages));
+		VM_BUG_ON(!list_empty(&cc.migratepages));
 	}
 
 	return 0;
 }
 
-int compact_pgdat(pg_data_t *pgdat, int order)
-{
-	struct compact_control cc = {
-		.order = order,
-		.sync = false,
-	};
-
-	return __compact_pgdat(pgdat, &cc);
-}
-
-static int compact_node(int nid, bool sync)
-{
-	struct compact_control cc = {
-		.order = -1,
-		.sync = sync,
-	};
-
-	return __compact_pgdat(NODE_DATA(nid), &cc);
-}
-
 /* Compact all nodes in the system */
-int compact_nodes(bool sync)
+void compact_nodes(bool sync)
 {
 	int nid;
 
-	/* Flush pending updates to the LRU lists */
-	lru_add_drain_all();
-
 	for_each_online_node(nid)
 		compact_node(nid, sync);
-
-	return COMPACT_COMPLETE;
 }
 
 /* The written value is actually unused, all memory is compacted */
@@ -755,7 +731,7 @@ int sysctl_compaction_handler(struct ctl_table *table, int write,
 			void __user *buffer, size_t *length, loff_t *ppos)
 {
 	if (write)
-		return compact_nodes(true);
+		compact_nodes(true);
 
 	return 0;
 }
@@ -773,14 +749,7 @@ ssize_t sysfs_compact_node(struct sys_device *dev,
 			struct sysdev_attribute *attr,
 			const char *buf, size_t count)
 {
-	int nid = dev->id;
-
-	if (nid >= 0 && nid < nr_node_ids && node_online(nid)) {
-		/* Flush pending updates to the LRU lists */
-		lru_add_drain_all();
-
-		compact_node(nid);
-	}
+	compact_node(dev->id);
 
 	return count;
 }
