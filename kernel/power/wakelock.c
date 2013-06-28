@@ -22,9 +22,7 @@
 #ifdef CONFIG_WAKELOCK_STAT
 #include <linux/proc_fs.h>
 #endif
-#include "power.h"
-
-#include <linux/delay.h>	
+#include "power.h"	
 
 enum {
 	DEBUG_EXIT_SUSPEND = 1U << 0,
@@ -343,7 +341,6 @@ static void suspend(struct work_struct *work)
 	int ret;
 	int entry_event_num;
 	struct timespec ts_entry, ts_exit;
-	msleep(50);
 
 	if (has_wake_lock(WAKE_LOCK_SUSPEND)) {
 		if (debug_mask & DEBUG_SUSPEND)
