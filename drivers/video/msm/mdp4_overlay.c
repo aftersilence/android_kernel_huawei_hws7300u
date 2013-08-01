@@ -2721,7 +2721,6 @@ static int mdp4_calc_pipe_mdp_bw(struct msm_fb_data_type *mfd,
 		pr_debug("%s: src_h=%d dst_h=%d mdp ib %llu, ib_quota=%llu\n",
 			 __func__, pipe->src_h, pipe->dst_h,
 			 ib<<shift, pipe->bw_ib_quota<<shift);
->>>>>>> ef2186e... msm_fb: display:  add mdp bandwidth runtime calculation
 	}
 
 	pipe->bw_ab_quota <<= shift;

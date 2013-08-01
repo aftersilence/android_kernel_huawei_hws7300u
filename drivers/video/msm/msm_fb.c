@@ -817,8 +817,6 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 	case FB_BLANK_UNBLANK:
 		if (!mfd->panel_power_on) {
 			msleep(16);
-			if (pdata->controller_on_panel_on)
-				pdata->power_on_panel_at_pan = 1;
 			ret = pdata->on(mfd->pdev);
 			if (ret == 0) {
 				mfd->panel_power_on = TRUE;
@@ -1731,14 +1729,8 @@ static int msm_fb_pan_display(struct fb_var_screeninfo *var,
 		}
 	}
 
-	if (pdata && pdata->power_on_panel_at_pan) {
-		/* No vsync allowed at first pan since it will hang
-		   during dma transfer */
-		mdp_set_dma_pan_info(info, dirtyPtr, FALSE);
-	} else {
 	mdp_set_dma_pan_info(info, dirtyPtr,
 			     (var->activate == FB_ACTIVATE_VBL));
-	}
 	mdp_dma_pan_update(info);
 	up(&msm_fb_pan_sem);
 
