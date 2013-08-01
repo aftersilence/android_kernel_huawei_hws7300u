@@ -2406,9 +2406,6 @@ int mdp_bus_scale_update_request(u64 ab, u64 ib)
 }
 static int mdp_bus_scale_restore_request(void)
 {
-	pr_debug("%s: index=%d ab=%llu ib=%llu\n", __func__, bus_index,
-		mdp_bus_usecases[bus_index].vectors->ab,
-		mdp_bus_usecases[bus_index].vectors->ib);
 	return mdp_bus_scale_update_request
 		(mdp_bus_usecases[bus_index].vectors->ab,
 		 mdp_bus_usecases[bus_index].vectors->ib);
