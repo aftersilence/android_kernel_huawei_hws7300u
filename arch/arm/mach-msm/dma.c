@@ -1,7 +1,7 @@
 /* linux/arch/arm/mach-msm/dma.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2010, 2012 Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -68,8 +68,6 @@ struct msm_dmov_conf {
 	struct clk *ebiclk;
 	unsigned int clk_ctl;
 	struct timer_list timer;
-	spinlock_t  ready_commands_locks[MSM_DMOV_CHANNEL_COUNT];
-	spinlock_t  active_commands_locks[MSM_DMOV_CHANNEL_COUNT];
 };
 
 static void msm_dmov_clock_timer(unsigned long);
@@ -287,12 +285,12 @@ void msm_dmov_enqueue_cmd_ext(unsigned id, struct msm_dmov_cmd *cmd)
 	int adm = DMOV_ID_TO_ADM(id);
 	int ch = DMOV_ID_TO_CHAN(id);
 
-	unsigned long irq_cmd_flags = 0;
-
 	spin_lock_irqsave(&dmov_conf[adm].lock, irq_flags);
-	if (dmov_conf[adm].clk_ctl == CLK_DIS)
-		msm_dmov_clk_toggle(adm, 1);
-	else if (dmov_conf[adm].clk_ctl == CLK_TO_BE_DIS)
+	if (dmov_conf[adm].clk_ctl == CLK_DIS) {
+		status = msm_dmov_clk_toggle(adm, 1);
+		if (status != 0)
+			goto error;
+	} else if (dmov_conf[adm].clk_ctl == CLK_TO_BE_DIS)
 		del_timer(&dmov_conf[adm].timer);
 	dmov_conf[adm].clk_ctl = CLK_EN;
 
@@ -302,22 +300,7 @@ void msm_dmov_enqueue_cmd_ext(unsigned id, struct msm_dmov_cmd *cmd)
 			id, status);
 		if (cmd->exec_func)
 			cmd->exec_func(cmd);
-
-		spin_lock_irqsave(&dmov_conf[adm].active_commands_locks[ch],irq_cmd_flags);
-
-		if(likely(list_entry(&cmd->list, typeof(*cmd), list) 
-			 != list_entry(dmov_conf[adm].active_commands[ch].prev, typeof(*cmd),list)) )
-		{
-		    list_add_tail(&cmd->list, &dmov_conf[adm].active_commands[ch]);
-		}
-		else
-		{
-		    printk(KERN_ERR"%s:%d repeat enqueue,adm = %d,channel = %d,cmd->cmdptr=0x%ux",
-				             __func__,__LINE__,adm,ch,cmd->cmdptr);
-		}
-		
-		spin_unlock_irqrestore(&dmov_conf[adm].active_commands_locks[ch], irq_cmd_flags);
-
+		list_add_tail(&cmd->list, &dmov_conf[adm].active_commands[ch]);
 		if (!dmov_conf[adm].channel_active)
 			enable_irq(dmov_conf[adm].irq);
 		dmov_conf[adm].channel_active |= 1U << ch;
@@ -333,21 +316,9 @@ void msm_dmov_enqueue_cmd_ext(unsigned id, struct msm_dmov_cmd *cmd)
 				"status %x\n", id, status);
 		PRINT_IO("msm_dmov_enqueue_cmd(%d), enqueue command, status "
 		    "%x\n", id, status);
-		spin_lock_irqsave(&dmov_conf[adm].ready_commands_locks[ch],irq_cmd_flags);
-
-		if(likely(list_entry(&cmd->list, typeof(*cmd), list) 
-			 != list_entry(dmov_conf[adm].ready_commands[ch].prev, typeof(*cmd),list)) )
-		{	
-		    list_add_tail(&cmd->list, &dmov_conf[adm].ready_commands[ch]);
-		}
-		else
-		{
-		    printk(KERN_ERR"%s:%d repeat enqueue,adm = %d,channel = %d,cmd->cmdptr=0x%ux",
-				             __func__,__LINE__,adm,ch,cmd->cmdptr);
-		}
-		
-		spin_unlock_irqrestore(&dmov_conf[adm].ready_commands_locks[ch], irq_cmd_flags);
+		list_add_tail(&cmd->list, &dmov_conf[adm].ready_commands[ch]);
 	}
+error:
 	spin_unlock_irqrestore(&dmov_conf[adm].lock, irq_flags);
 }
 EXPORT_SYMBOL(msm_dmov_enqueue_cmd_ext);
@@ -448,8 +419,6 @@ static irqreturn_t msm_datamover_irq_handler(int irq, void *dev_id)
 	struct msm_dmov_cmd *cmd;
 	int adm = DMOV_IRQ_TO_ADM(irq);
 
-	unsigned long irq_cmd_flags = 0;
-
 	spin_lock_irqsave(&dmov_conf[adm].lock, irq_flags);
 	/* read and clear isr */
 	int_status = readl_relaxed(DMOV_REG(DMOV_ISR, adm));
@@ -487,11 +456,7 @@ static irqreturn_t msm_datamover_irq_handler(int irq, void *dev_id)
 				PRINT_IO("msm_datamover_irq_handler id %d, got result "
 					"for %p, result %x\n", id, cmd, ch_result);
 				if (cmd) {
-					spin_lock_irqsave(&dmov_conf[adm].active_commands_locks[ch],irq_cmd_flags);
-					
 					list_del(&cmd->list);
-					
-					spin_unlock_irqrestore(&dmov_conf[adm].active_commands_locks[ch], irq_cmd_flags);
 					cmd->complete_func(cmd, ch_result, NULL);
 				}
 			}
@@ -502,11 +467,7 @@ static irqreturn_t msm_datamover_irq_handler(int irq, void *dev_id)
 				PRINT_FLOW("msm_datamover_irq_handler id %d, status %x\n", id, ch_status);
 				PRINT_FLOW("msm_datamover_irq_handler id %d, flush, result %x, flush0 %x\n", id, ch_result, errdata.flush[0]);
 				if (cmd) {
-					spin_lock_irqsave(&dmov_conf[adm].active_commands_locks[ch],irq_cmd_flags);
-					
 					list_del(&cmd->list);
-					
-					spin_unlock_irqrestore(&dmov_conf[adm].active_commands_locks[ch], irq_cmd_flags);
 					cmd->complete_func(cmd, ch_result, &errdata);
 				}
 			}
@@ -518,11 +479,7 @@ static irqreturn_t msm_datamover_irq_handler(int irq, void *dev_id)
 				PRINT_ERROR("msm_datamover_irq_handler id %d, status %x\n", id, ch_status);
 				PRINT_ERROR("msm_datamover_irq_handler id %d, error, result %x, flush0 %x\n", id, ch_result, errdata.flush[0]);
 				if (cmd) {
-					spin_lock_irqsave(&dmov_conf[adm].active_commands_locks[ch],irq_cmd_flags);
-					
 					list_del(&cmd->list);
-					
-					spin_unlock_irqrestore(&dmov_conf[adm].active_commands_locks[ch], irq_cmd_flags);
 					cmd->complete_func(cmd, ch_result, &errdata);
 				}
 				/* this does not seem to work, once we get an error */
@@ -539,23 +496,11 @@ static irqreturn_t msm_datamover_irq_handler(int irq, void *dev_id)
 				cmd = list_entry(dmov_conf[adm].
 					ready_commands[ch].next, typeof(*cmd),
 					list);
-				
-				spin_lock_irqsave(&dmov_conf[adm].ready_commands_locks[ch],irq_cmd_flags);
-				
 				list_del(&cmd->list);
-				
-				spin_unlock_irqrestore(&dmov_conf[adm].ready_commands_locks[ch], irq_cmd_flags);
-				
 				if (cmd->exec_func)
 					cmd->exec_func(cmd);
-				
-				spin_lock_irqsave(&dmov_conf[adm].active_commands_locks[ch],irq_cmd_flags);
-				
 				list_add_tail(&cmd->list,
 					&dmov_conf[adm].active_commands[ch]);
-				
-				spin_unlock_irqrestore(&dmov_conf[adm].active_commands_locks[ch], irq_cmd_flags);
-				
 				PRINT_FLOW("msm_datamover_irq_handler id %d, start command\n", id);
 				writel_relaxed(cmd->cmdptr,
 					       DMOV_REG(DMOV_CMD_PTR(ch), adm));
@@ -727,8 +672,6 @@ static int msm_dmov_probe(struct platform_device *pdev)
 	for (i = 0; i < MSM_DMOV_CHANNEL_COUNT; i++) {
 		INIT_LIST_HEAD(&dmov_conf[adm].ready_commands[i]);
 		INIT_LIST_HEAD(&dmov_conf[adm].active_commands[i]);
-        dmov_conf[adm].ready_commands_locks[i] = __SPIN_LOCK_UNLOCKED(dmov_readylock);
-        dmov_conf[adm].active_commands_locks[i] = __SPIN_LOCK_UNLOCKED(dmov_activelock);
 
 		writel_relaxed(DMOV_RSLT_CONF_IRQ_EN
 		     | DMOV_RSLT_CONF_FORCE_FLUSH_RSLT,
