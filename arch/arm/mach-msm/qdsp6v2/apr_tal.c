@@ -221,8 +221,6 @@ int apr_tal_close(struct apr_svc_ch_dev *apr_ch)
 	return r;
 }
 
-extern void usb_delay_launch(void);
-
 static int apr_smd_probe(struct platform_device *pdev)
 {
 	int dest;
@@ -234,8 +232,6 @@ static int apr_smd_probe(struct platform_device *pdev)
 		clnt = APR_CLIENT_VOICE;
 		apr_svc_ch[APR_DL_SMD][dest][clnt].dest_state = 1;
 		wake_up(&apr_svc_ch[APR_DL_SMD][dest][clnt].dest);
-		
-		usb_delay_launch();
 		
 	} else if (pdev->id == APR_DEST_QDSP6) {
 		pr_info("apr_tal:Q6 Is Up\n");

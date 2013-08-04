@@ -46,7 +46,6 @@ static void msm_otg_set_id_state(int id)
 #endif
 
 struct msm_otg *the_msm_otg;
-extern u16 usb_fastboot;
 
 static int is_host(void)
 {
@@ -578,10 +577,6 @@ static void msm_otg_start_peripheral(struct otg_transceiver *xceiv, int on)
 		return;
 
 	if (on) {
-		if (pdata->set_gpio_charger) {
-			pdata->set_gpio_charger(0);
-		}
-        
 		if (pdata->setup_gpio)
 			pdata->setup_gpio(USB_SWITCH_PERIPHERAL);
 		/* vote for minimum dma_latency to prevent idle
@@ -611,10 +606,6 @@ static void msm_otg_start_peripheral(struct otg_transceiver *xceiv, int on)
 		otg_pm_qos_update_latency(dev, 0);
 		if (pdata->setup_gpio)
 			pdata->setup_gpio(USB_SWITCH_DISABLE);
-
-		if (pdata->set_gpio_charger) {
-			pdata->set_gpio_charger(1);
-		}
 	}
 }
 
@@ -806,21 +797,13 @@ static int msm_otg_suspend(struct msm_otg *dev)
 			dev->pdata->ldo_enable(0);
 		}
 	}
-	if (dev->pdata->ldo_enable) {
-		ret = dev->pdata->ldo_enable(0);
-		if (ret) {
-			pr_err("%s: ldo_enable failed with err:%d\n",
-					__func__, ret);
-		}
-	}
+
 	/* phy can interrupts when vddcx is at 0.75, so irrespective
 	 * of pmic notification support, configure vddcx @0.75
 	 */
 	if (dev->pdata->config_vddcx)
 		dev->pdata->config_vddcx(0);
 	pr_info("%s: usb in low power mode\n", __func__);
-
-	msleep(1000);
 
 out:
 	enable_irq(dev->irq);
@@ -835,13 +818,6 @@ static int msm_otg_resume(struct msm_otg *dev)
 
 	if (!atomic_read(&dev->in_lpm))
 		return 0;
-	if (dev->pdata->ldo_enable) {
-		ret = dev->pdata->ldo_enable(1);
-		if (ret) {
-			pr_err("%s: ldo_enable failed with err:%d\n",
-					__func__, ret);
-		}
-	}
 	/* vote for vddcx, as PHY cannot tolerate vddcx below 1.0V */
 	if (dev->pdata->config_vddcx) {
 		ret = dev->pdata->config_vddcx(1);
@@ -1054,10 +1030,7 @@ static int msm_otg_set_suspend(struct otg_transceiver *xceiv, int suspend)
 			if (can_phy_power_collapse(dev) &&
 					dev->pdata->ldo_enable)
 				dev->pdata->ldo_enable(1);
-		if (dev->pdata->ldo_enable) {
-			dev->pdata->ldo_enable(1);
-		}
-				
+
 		msm_otg_get_resume(dev);
 
 		if (!is_phy_clk_disabled())
@@ -1211,30 +1184,8 @@ static void msm_otg_set_id_state(int id)
 	struct msm_otg *dev = the_msm_otg;
 	unsigned long flags;
 
-	if(1 == usb_fastboot )
-		return;
-
 	if (!atomic_read(&dev->in_lpm))
 		return;
-
-	if (id) {
-		set_bit(ID, &dev->inputs);
-	} else {
-		clear_bit(ID, &dev->inputs);
-		set_bit(A_BUS_REQ, &dev->inputs);
-	}
-	spin_lock_irqsave(&dev->lock, flags);
-	if (dev->otg.state != OTG_STATE_UNDEFINED) {
-		wake_lock(&dev->wlock);
-		queue_work(dev->wq, &dev->sm_work);
-	}
-	spin_unlock_irqrestore(&dev->lock, flags);
-}
-
-void msm_otg_set_host_port(int id)
-{
-	struct msm_otg *dev = the_msm_otg;
-	unsigned long flags;
 
 	if (id) {
 		set_bit(ID, &dev->inputs);
@@ -1810,8 +1761,6 @@ static void msm_otg_sm_work(struct work_struct *w)
 
 			if (dev->pdata->ldo_set_voltage)
 				dev->pdata->ldo_set_voltage(3075);
-			if (dev->pdata->ldo_enable)
-				dev->pdata->ldo_enable(0);
 		}
 		break;
 	case OTG_STATE_B_SRP_INIT:
@@ -2593,7 +2542,8 @@ static int otg_debugfs_init(struct msm_otg *dev)
 	otg_debug_root = debugfs_create_dir("otg", NULL);
 	if (!otg_debug_root)
 		return -ENOENT;
-	otg_debug_mode = debugfs_create_file("mode", 0664,
+
+	otg_debug_mode = debugfs_create_file("mode", 0222,
 						otg_debug_root, dev,
 						&otgfs_fops);
 	if (!otg_debug_mode)
