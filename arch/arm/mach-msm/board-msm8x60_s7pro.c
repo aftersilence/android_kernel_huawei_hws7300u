@@ -338,10 +338,8 @@ struct pm8xxx_mpp_init_info {
 }
 
 #if S7_HWID_L3H(S7, S7301, C)
-extern u16 usb_fastboot;
 extern int config_boost_5v_gpio(int enable);
 #endif
-
 
 #define EXT_CHG_VALID_MPP1 10
 #define MPP11_GPIO PM8058_MPP_PM_TO_SYS(EXT_CHG_VALID_MPP1)
@@ -1960,10 +1958,7 @@ static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 	}
 	if (on) {
 #if S7_HWID_L3H(S7, S7301, C)
-        if(1 == usb_fastboot )
-            return;
-        
-        config_boost_5v_gpio(on);
+	config_boost_5v_gpio(on);
 #else
 		if (regulator_enable(ext_5v_reg)) {
 			pr_err("%s: Unable to enable the regulator:"

@@ -298,121 +298,7 @@
 #include "gadget_chips.h"
 
 
-#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
-#include <linux/usb/android_composite.h>
-#include <linux/platform_device.h>
-#endif
-
-
 /*------------------------------------------------------------------------*/
-
-#define FS_PATH "/system/etc/cd.iso" 
-#define DEV_PATH "/sys/devices/platform/msm_hsusb/gadget/lun0/file" 
-
-#define CONFIG_USB_AUTO_INSTALL
-
-#ifdef CONFIG_USB_AUTO_INSTALL
-typedef struct _scsi_rewind_cmd_type
-{
-   u8 cmd;
-   u8 ind;
-   u8 os_type;
-   u8 time_to_delay;
-   u8 pidh;
-   u8 pidl;
-} scsi_rewind_cmd_type;
-
-#define MOUNT_AS_UDISK     "mount_as_udisk"
-typedef struct _scsi_rewind_cmd_type_extend
-{
-   scsi_rewind_cmd_type cmd;
-   u8 switch_udisk_maincmd;
-   u8 switch_udisk_subcmd;
-   u8 reserver[4];
-} scsi_rewind_cmd_type_extend;
-
-typedef enum _switch_udisk_maincmd_
-{
-  MAINCMD_INQUIRY,
-  MAINCMD_RUN,
-}switch_udisk_maincmd;
-
-typedef enum _switch_udisk_subcmd_
-{
-  CMD_SWITCH_UDISK = 1,
-  CMD_SWITCH_CDROM = 2,
-}switch_udisk_subcmd;
-
-typedef enum _switch_udisk_result_
-{
-  RET_SUCESS,
-  RET_DO_NOTHING,
-  RET_SWITCH_BUSY,
-  RET_SWITCH_SD_ABSENCE,
-  RET_SD_INBUSY,
-  RET_UNKNOWN_CMD,
-}switch_udisk_result;
-
-static u8 usbsdms_read_toc_data1[] = 
-{
-    0x00,0x0A,0x01,0x01,
-    0x00,0x14,0x01,0x00,0x00,0x00,0x02,0x00
-};
-
-static  u8 usbsdms_read_toc_data1_format0000[] = 
-{
-    0x00,0x12,0x01,0x01,
-    0x00,0x14,0x01,0x00,0x00,0x00,0x00,0x00,
-    0x00,0x14,0xAA,0x00,0x00,0x00,0xFF,0xFF 
-};
-
-static u8 usbsdms_read_toc_data1_format0001[] = 
-{
-    0x00,0x0A,0x01,0x01,
-    0x00,0x14,0x01,0x00,0x00,0x00,0x00,0x00
-};
-
-static u8 usbsdms_read_toc_data2[] = 
-{
-    0x00,0x2e,0x01,0x01,
-    0x01,0x14,0x00,0xa0,0x00,0x00,0x00,0x00,0x01,0x00,0x00,
-    0x01,0x14,0x00,0xa1,0x00,0x00,0x00,0x00,0x01,0x00,0x00,
-    0x01,0x14,0x00,0xa2,0x00,0x00,0x00,0x00,0x06,0x00,0x3c,
-    0x01,0x14,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x02,0x00
-};
-
-static u8 usbsdms_read_toc_data3[] = 
-{
-    0x00,0x12,0x01,0x01,
-    0x00,0x14,0x01,0x00,0x00,0x00,0x02,0x00,
-    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-};
-
-char luncount;
-
-
-typedef  struct _usbsdms_read_toc_cmd_type
-{
-   u8  op_code;  
-   u8  msf;             /* bit1 is MSF, 0: address format is LBA form
-                                        1: address format is MSF form */
-   u8  format;          /* bit3~bit0,   MSF Field   Track/Session Number
-                           0000b:       Valid       Valid as a Track Number
-                           0001b:       Valid       Ignored by Drive
-                           0010b:       Ignored     Valid as a Session Number
-                           0011b~0101b: Ignored     Ignored by Drive
-                           0110b~1111b: Reserved
-                        */
-   u8  reserved1;  
-   u8  reserved2;  
-   u8  reserved3;  
-   u8  session_num;     /* a specific session or a track */
-   u8  allocation_length_msb;
-   u8  allocation_length_lsb;
-   u8  control;
-} usbsdms_read_toc_cmd_type;
-
-#endif  /* #ifdef CONFIG_USB_AUTO_INSTALL */
 
 #define FSG_DRIVER_DESC		"Mass Storage Function"
 #define FSG_DRIVER_VERSION	"2009/09/11"
@@ -631,7 +517,6 @@ static int fsg_set_halt(struct fsg_dev *fsg, struct usb_ep *ep)
 /* Caller must hold fsg->lock */
 static void wakeup_thread(struct fsg_common *common)
 {
-	smp_wmb();	/* ensure the write of bh->state is complete */
 	/* Tell the main thread that something has happened */
 	common->thread_wakeup_needed = 1;
 	if (common->thread_task)
@@ -849,7 +734,6 @@ static int sleep_thread(struct fsg_common *common)
 	}
 	__set_current_state(TASK_RUNNING);
 	common->thread_wakeup_needed = 0;
-	smp_rmb();	/* ensure the latest bh->state is visible */
 	return rc;
 }
 
@@ -1503,12 +1387,9 @@ static int do_read_header(struct fsg_common *common, struct fsg_buffhd *bh)
 static int do_read_toc(struct fsg_common *common, struct fsg_buffhd *bh)
 {
 	struct fsg_lun	*curlun = common->curlun;
-	/*int		msf = common->cmnd[1] & 0x02;*/
+	int		msf = common->cmnd[1] & 0x02;
 	int		start_track = common->cmnd[6];
-	u8		*buf = (u8 *) bh->buf;
-    usbsdms_read_toc_cmd_type *read_toc_cmd = NULL;
-    unsigned long response_length = 0;
-    u8 *response_ptr = NULL;
+	u8		*buf = (u8 *)bh->buf;
 
 	if ((common->cmnd[1] & ~0x02) != 0 ||	/* Mask away MSF */
 			start_track > 1) {
@@ -1516,52 +1397,6 @@ static int do_read_toc(struct fsg_common *common, struct fsg_buffhd *bh)
 		return -EINVAL;
 	}
 
-    read_toc_cmd = (usbsdms_read_toc_cmd_type *)&common->cmnd[0];
-    if ( 2 == read_toc_cmd->msf )
-    {
-        response_ptr = usbsdms_read_toc_data2;
-        response_length = sizeof(usbsdms_read_toc_data2);
-    }
-    else if(0 != read_toc_cmd->allocation_length_msb)
-    {
-        response_ptr = usbsdms_read_toc_data3;
-        response_length = sizeof(usbsdms_read_toc_data3);
-    }
-    else
-    {
-        if(0 == read_toc_cmd->format)
-        {
-            response_ptr = usbsdms_read_toc_data1_format0000;
-            response_length = sizeof(usbsdms_read_toc_data1_format0000);
-        }
-        else if(1 == read_toc_cmd->format)
-        {
-
-            response_ptr = usbsdms_read_toc_data1_format0001;
-            response_length = sizeof(usbsdms_read_toc_data1_format0001);
-        }
-        else
-        {
-            response_ptr = usbsdms_read_toc_data1;
-            response_length = sizeof(usbsdms_read_toc_data1);
-        }
-    }
-
-
-    memcpy(buf, response_ptr, response_length);
-
-    if(response_length < common->data_size_from_cmnd)
-    {
-        common->data_size_from_cmnd =response_length;
-    }
-
-    common->data_size = common->data_size_from_cmnd;
-    
-    common->residue = common->usb_amount_left = common->data_size;
-    
-    return response_length;
-
-#if 0
 	memset(buf, 0, 20);
 	buf[1] = (20-2);		/* TOC data length */
 	buf[2] = 1;			/* First track number */
@@ -1574,7 +1409,6 @@ static int do_read_toc(struct fsg_common *common, struct fsg_buffhd *bh)
 	buf[14] = 0xAA;			/* Lead-out track number */
 	store_cdrom_address(&buf[16], msf, curlun->num_sectors);
 	return 20;
-#endif
 }
 
 static int do_mode_sense(struct fsg_common *common, struct fsg_buffhd *bh)
@@ -2187,7 +2021,6 @@ static int check_command(struct fsg_common *common, int cmnd_size,
 	return 0;
 }
 
-extern void usb_diag_switch(void);
 static int do_scsi_command(struct fsg_common *common)
 {
 	struct fsg_buffhd	*bh;
@@ -2325,7 +2158,7 @@ static int do_scsi_command(struct fsg_common *common)
 		common->data_size_from_cmnd =
 			get_unaligned_be16(&common->cmnd[7]);
 		reply = check_command(common, 10, DATA_DIR_TO_HOST,
-				      (3<<1) | (7<<7), 1,
+				      (7<<6) | (1<<1), 1,
 				      "READ TOC");
 		if (reply == 0)
 			reply = do_read_toc(common, bh);
@@ -2418,10 +2251,6 @@ static int do_scsi_command(struct fsg_common *common)
 			reply = do_write(common);
 		break;
 
-	case SPACE:
-		usb_diag_switch();
-		break;
-
 	/*
 	 * Some mandatory commands that we recognize but don't implement.
 	 * They don't mean much in this setting.  It's left as an exercise
@@ -2503,7 +2332,7 @@ static int received_cbw(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 
 	/* Is the CBW meaningful? */
 	if (cbw->Lun >= FSG_MAX_LUNS || cbw->Flags & ~USB_BULK_IN_FLAG ||
-			cbw->Length < 0 || cbw->Length > MAX_COMMAND_SIZE) {
+			cbw->Length <= 0 || cbw->Length > MAX_COMMAND_SIZE) {
 		DBG(fsg, "non-meaningful CBW: lun = %u, flags = 0x%x, "
 				"cmdlen %u\n",
 				cbw->Lun, cbw->Flags, cbw->Length);
@@ -2522,7 +2351,6 @@ static int received_cbw(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 	/* Save the command for later */
 	common->cmnd_size = cbw->Length;
 	memcpy(common->cmnd, cbw->CDB, common->cmnd_size);
-	common->cmnd[0] = cbw->CDB[0];
 	if (cbw->Flags & USB_BULK_IN_FLAG)
 		common->data_dir = DATA_DIR_TO_HOST;
 	else
@@ -3051,13 +2879,6 @@ static struct fsg_common *fsg_common_init(struct fsg_common *common,
 	for (i = 0, lcfg = cfg->luns; i < nluns; ++i, ++curlun, ++lcfg) {
 		curlun->cdrom = !!lcfg->cdrom;
 		curlun->ro = lcfg->cdrom || lcfg->ro;
-
-		if(0 == i)
-		{
-           curlun->cdrom = 1;
-           curlun->ro = 1;
-		}
-
 		curlun->initially_ro = curlun->ro;
 		curlun->removable = lcfg->removable;
 		curlun->nofua = lcfg->nofua;

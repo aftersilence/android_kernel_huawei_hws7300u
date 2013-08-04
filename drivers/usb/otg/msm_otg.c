@@ -41,6 +41,7 @@
 
 #include <mach/clk.h>
 #include <mach/msm_xo.h>
+#include <mach/msm_bus.h>
 
 #define MSM_USB_BASE	(motg->regs)
 #define DRIVER_NAME	"msm_otg"
@@ -64,6 +65,7 @@
 static DECLARE_COMPLETION(pmic_vbus_init);
 static struct msm_otg *the_msm_otg;
 static bool debug_aca_enabled;
+static bool debug_bus_voting_enabled;
 
 /* Prevent idle power collapse(pc) while operating in peripheral mode */
 static void otg_pm_qos_update_latency(struct msm_otg *dev, int vote)
@@ -606,7 +608,7 @@ static int msm_otg_suspend(struct msm_otg *motg)
 	struct usb_bus *bus = otg->host;
 	struct msm_otg_platform_data *pdata = motg->pdata;
 	int cnt = 0;
-	bool host_bus_suspend;
+	bool host_bus_suspend, dcp;
 	u32 phy_ctrl_val = 0, cmd_val;
 	unsigned ret;
 	u32 portsc;
@@ -616,6 +618,7 @@ static int msm_otg_suspend(struct msm_otg *motg)
 
 	disable_irq(motg->irq);
 	host_bus_suspend = otg->host && !test_bit(ID, &motg->inputs);
+	dcp = motg->chg_type == USB_DCP_CHARGER;
 	/*
 	 * Chipidea 45-nm PHY suspend sequence:
 	 *
@@ -688,7 +691,11 @@ static int msm_otg_suspend(struct msm_otg *motg)
 		cmd_val |= ULPI_STP_CTRL;
 	writel_relaxed(cmd_val, USB_USBCMD);
 
-	if (motg->caps & ALLOW_PHY_RETENTION && !host_bus_suspend) {
+	/*
+	 * BC1.2 spec mandates PD to enable VDP_SRC when charging from DCP.
+	 * PHY retention and collapse can not happen with VDP_SRC enabled.
+	 */
+	if (motg->caps & ALLOW_PHY_RETENTION && !host_bus_suspend && !dcp) {
 		phy_ctrl_val = readl_relaxed(USB_PHY_CTRL);
 		if (motg->pdata->otg_control == OTG_PHY_CONTROL)
 			/* Enable PHY HV interrupts to wake MPM/Link */
@@ -710,7 +717,8 @@ static int msm_otg_suspend(struct msm_otg *motg)
 		dev_err(otg->dev, "%s failed to devote for "
 			"TCXO D0 buffer%d\n", __func__, ret);
 
-	if (motg->caps & ALLOW_PHY_POWER_COLLAPSE && !host_bus_suspend) {
+	if (motg->caps & ALLOW_PHY_POWER_COLLAPSE &&
+			!host_bus_suspend && !dcp) {
 		msm_hsusb_ldo_enable(motg, 0);
 		motg->lpm_flags |= PHY_PWR_COLLAPSED;
 	}
@@ -1089,6 +1097,7 @@ static int msm_otg_set_host(struct otg_transceiver *otg, struct usb_bus *host)
 
 static void msm_otg_start_peripheral(struct otg_transceiver *otg, int on)
 {
+	int ret;
 	struct msm_otg *motg = container_of(otg, struct msm_otg, otg);
 	struct msm_otg_platform_data *pdata = motg->pdata;
 
@@ -1109,11 +1118,27 @@ static void msm_otg_start_peripheral(struct otg_transceiver *otg, int on)
 		 * power collapse(pc) while running in peripheral mode.
 		 */
 		otg_pm_qos_update_latency(motg, 1);
+		/* Configure BUS performance parameters for MAX bandwidth */
+		if (motg->bus_perf_client && debug_bus_voting_enabled) {
+			ret = msm_bus_scale_client_update_request(
+					motg->bus_perf_client, 1);
+			if (ret)
+				dev_err(motg->otg.dev, "%s: Failed to vote for "
+					   "bus bandwidth %d\n", __func__, ret);
+		}
 		usb_gadget_vbus_connect(otg->gadget);
 	} else {
 		dev_dbg(otg->dev, "gadget off\n");
 		usb_gadget_vbus_disconnect(otg->gadget);
 		otg_pm_qos_update_latency(motg, 0);
+		/* Configure BUS performance parameters to default */
+		if (motg->bus_perf_client) {
+			ret = msm_bus_scale_client_update_request(
+					motg->bus_perf_client, 0);
+			if (ret)
+				dev_err(motg->otg.dev, "%s: Failed to devote "
+					   "for bus bw %d\n", __func__, ret);
+		}
 		if (pdata->setup_gpio)
 			pdata->setup_gpio(OTG_STATE_UNDEFINED);
 	}
@@ -1382,6 +1407,9 @@ static void msm_chg_enable_secondary_det(struct msm_otg *motg)
 		ulpi_write(otg, chg_det, 0x34);
 		break;
 	case SNPS_28NM_INTEGRATED_PHY:
+		/* Turn off VDP_SRC */
+		ulpi_write(otg, 0x3, 0x86);
+		msleep(20);
 		/*
 		 * Configure DM as current source, DP as current sink
 		 * and enable battery charging comparators.
@@ -1583,8 +1611,8 @@ static const char *chg_to_string(enum usb_chg_type chg_type)
 
 #define MSM_CHG_DCD_POLL_TIME		(100 * HZ/1000) /* 100 msec */
 #define MSM_CHG_DCD_MAX_RETRIES		6 /* Tdcd_tmout = 6 * 100 msec */
-#define MSM_CHG_PRIMARY_DET_TIME	(40 * HZ/1000) /* TVDPSRC_ON */
-#define MSM_CHG_SECONDARY_DET_TIME	(40 * HZ/1000) /* TVDMSRC_ON */
+#define MSM_CHG_PRIMARY_DET_TIME	(50 * HZ/1000) /* TVDPSRC_ON */
+#define MSM_CHG_SECONDARY_DET_TIME	(50 * HZ/1000) /* TVDMSRC_ON */
 static void msm_chg_detect_work(struct work_struct *w)
 {
 	struct msm_otg *motg = container_of(w, struct msm_otg, chg_work.work);
@@ -1801,6 +1829,8 @@ static void msm_otg_sm_work(struct work_struct *w)
 			case USB_CHG_STATE_DETECTED:
 				switch (motg->chg_type) {
 				case USB_DCP_CHARGER:
+					/* Enable VDP_SRC */
+					ulpi_write(otg, 0x2, 0x85);
 					msm_otg_notify_charger(motg,
 							IDEV_CHG_MAX);
 					pm_runtime_put_noidle(otg->dev);
@@ -2164,13 +2194,64 @@ const struct file_operations msm_otg_aca_fops = {
 	.release = single_release,
 };
 
+static int msm_otg_bus_show(struct seq_file *s, void *unused)
+{
+	if (debug_bus_voting_enabled)
+		seq_printf(s, "enabled\n");
+	else
+		seq_printf(s, "disabled\n");
+
+	return 0;
+}
+
+static int msm_otg_bus_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, msm_otg_bus_show, inode->i_private);
+}
+
+static ssize_t msm_otg_bus_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[8];
+	int ret;
+	struct seq_file *s = file->private_data;
+	struct msm_otg *motg = s->private;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count)))
+		return -EFAULT;
+
+	if (!strncmp(buf, "enable", 6)) {
+		/* Do not vote here. Let OTG statemachine decide when to vote */
+		debug_bus_voting_enabled = true;
+	} else {
+		debug_bus_voting_enabled = false;
+		if (motg->bus_perf_client) {
+			ret = msm_bus_scale_client_update_request(
+					motg->bus_perf_client, 0);
+			if (ret)
+				dev_err(motg->otg.dev, "%s: Failed to devote "
+					   "for bus bw %d\n", __func__, ret);
+		}
+	}
+
+	return count;
+}
+
+const struct file_operations msm_otg_bus_fops = {
+	.open = msm_otg_bus_open,
+	.read = seq_read,
+	.write = msm_otg_bus_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 static struct dentry *msm_otg_dbg_root;
-static struct dentry *msm_otg_dbg_mode;
-static struct dentry *msm_otg_chg_type;
-static struct dentry *msm_otg_dbg_aca;
 
 static int msm_otg_debugfs_init(struct msm_otg *motg)
 {
+	struct dentry *msm_otg_dentry;
 
 	msm_otg_dbg_root = debugfs_create_dir("msm_otg", NULL);
 
@@ -2180,35 +2261,43 @@ static int msm_otg_debugfs_init(struct msm_otg *motg)
 	if (motg->pdata->mode == USB_OTG &&
 		motg->pdata->otg_control == OTG_USER_CONTROL) {
 
-		msm_otg_dbg_mode = debugfs_create_file("mode", S_IRUGO |
+		msm_otg_dentry = debugfs_create_file("mode", S_IRUGO |
 			S_IWUSR, msm_otg_dbg_root, motg,
 			&msm_otg_mode_fops);
 
-		if (!msm_otg_dbg_mode) {
+		if (!msm_otg_dentry) {
 			debugfs_remove(msm_otg_dbg_root);
 			msm_otg_dbg_root = NULL;
 			return -ENODEV;
 		}
 	}
 
-	msm_otg_chg_type = debugfs_create_file("chg_type", S_IRUGO,
+	msm_otg_dentry = debugfs_create_file("chg_type", S_IRUGO,
 		msm_otg_dbg_root, motg,
 		&msm_otg_chg_fops);
 
-	if (!msm_otg_chg_type) {
+	if (!msm_otg_dentry) {
 		debugfs_remove_recursive(msm_otg_dbg_root);
 		return -ENODEV;
 	}
 
-	msm_otg_dbg_aca = debugfs_create_file("aca", S_IRUGO | S_IWUSR,
+	msm_otg_dentry = debugfs_create_file("aca", S_IRUGO | S_IWUSR,
 		msm_otg_dbg_root, motg,
 		&msm_otg_aca_fops);
 
-	if (!msm_otg_dbg_aca) {
+	if (!msm_otg_dentry) {
 		debugfs_remove_recursive(msm_otg_dbg_root);
 		return -ENODEV;
 	}
 
+	msm_otg_dentry = debugfs_create_file("bus_voting", S_IRUGO | S_IWUSR,
+		msm_otg_dbg_root, motg,
+		&msm_otg_bus_fops);
+
+	if (!msm_otg_dentry) {
+		debugfs_remove_recursive(msm_otg_dbg_root);
+		return -ENODEV;
+	}
 	return 0;
 }
 
@@ -2568,6 +2657,16 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 
+	if (motg->pdata->bus_scale_table) {
+		motg->bus_perf_client =
+		    msm_bus_scale_register_client(motg->pdata->bus_scale_table);
+		if (!motg->bus_perf_client)
+			dev_err(motg->otg.dev, "%s: Failed to register BUS "
+						"scaling client!!\n", __func__);
+		else
+			debug_bus_voting_enabled = true;
+	}
+
 	return 0;
 
 remove_otg:
@@ -2668,6 +2767,9 @@ static int __devexit msm_otg_remove(struct platform_device *pdev)
 
 	if (motg->pdata->swfi_latency)
 		pm_qos_remove_request(&motg->pm_qos_req_dma);
+
+	if (motg->bus_perf_client)
+		msm_bus_scale_unregister_client(motg->bus_perf_client);
 
 	kfree(motg);
 	return 0;

@@ -52,7 +52,6 @@
 #include "f_rmnet_sdio.c"
 #include "f_rmnet_smd_sdio.c"
 #include "f_rmnet.c"
-
 #include "f_audio_source.c"
 #include "f_mass_storage.c"
 #include "u_serial.c"
@@ -178,149 +177,6 @@ static struct usb_configuration android_config_driver = {
 	.unbind		= android_unbind_config,
 	.bConfigurationValue = 1,
 };
-
-static bool g_usb_launch = false;
-static void usb_delay_launch_func(struct work_struct *work);
-
-static DECLARE_DELAYED_WORK(usb_delay_launch_event, usb_delay_launch_func);
-
-static void usb_delay_launch_func(struct work_struct *work)
-{
-    printk(KERN_INFO "usb function launch\n");
-
-    if (_android_dev && _android_dev->cdev && _android_dev->cdev->gadget) 
-    {
-        usb_gadget_connect(_android_dev->cdev->gadget);
-        _android_dev->enabled = true;
-
-        g_usb_launch = true;
-    }
-
-    return;
-}
-
-void usb_delay_launch(void)
-{
-	schedule_delayed_work(&usb_delay_launch_event, msecs_to_jiffies(5000));
-	return;
-}
-EXPORT_SYMBOL( usb_delay_launch );
-
-static bool diag_flag = false;
-static int diag_count = 0;
-
-static void usb_diag_switch_delaywork(struct work_struct *work);
-static DECLARE_DELAYED_WORK(usb_diag_switch_event, usb_diag_switch_delaywork);
-static void usb_diag_switch_delaywork(struct work_struct *work)
-{
-	char *diag_switch[2]    = { "USB_STATE=DIAGSWITCH", NULL };
-    	
-    diag_flag = true;
-    while (diag_flag && (10 > diag_count)) {
-    	pr_info("usb send uevent (%s) diag_count: %d.\n", diag_switch[0], diag_count);
-    	kobject_uevent_env(&_android_dev->dev->kobj, KOBJ_CHANGE, diag_switch);
-    	msleep(5000);
-    	diag_count++;
-    }
-
-    diag_count = 0;
-   
-}
-
-void usb_diag_switch(void)
-{
-	schedule_delayed_work(&usb_diag_switch_event,msecs_to_jiffies(20));
-	return;
-}
-EXPORT_SYMBOL( usb_diag_switch );
-
-/* fast shutodwn operation file */
-#define USB_FASTBOOT_NORMAL	    "normal"
-#define USB_FASTBOOT_DEEPSLEEP	    "deepsleep"
-static char * g_fast_status = USB_FASTBOOT_NORMAL;
-u16 usb_fastboot = 0;
-extern void pmic_id_detect(struct work_struct *w);
-extern void msm_otg_set_host_port(int id);
-static int usb_get_fastboot(char *buffer, struct kernel_param *kp)
-{
-    int ret = 0;
-
-    if(NULL == g_fast_status)
-    {
-        ret = sprintf(buffer, "%s[%d]", USB_FASTBOOT_NORMAL, usb_fastboot);
-    }
-    else
-    {
-        ret = sprintf(buffer, "%s[%d]", g_fast_status, usb_fastboot);
-    }
-
-    return ret;
-}
-
-static int usb_set_fastboot(const char *buffer, struct kernel_param *kp)
-{
-    int len;
-    pr_info("usb fast boot status:%s", buffer);
-
-    if( (NULL == _android_dev) || (NULL == _android_dev->cdev) || 
-                (NULL == _android_dev->cdev->gadget) )
-    {
-        pr_err("usb_set_fastboot, null parameter");
-        return -EIO;
-    }
-
-    len = strlen(buffer);
-    if (len == 0)
-    {
-        return -EIO;
-    }
-
-    if( !strcmp(buffer, USB_FASTBOOT_DEEPSLEEP) )
-    {/*close usb*/
-        if( !strcmp(g_fast_status, USB_FASTBOOT_DEEPSLEEP) )
-        {
-            pr_info( "the current usb fast status is %s, no need to change", g_fast_status );
-            return 0;
-        }
-        g_fast_status = USB_FASTBOOT_DEEPSLEEP;
-        
-        /*close usb device*/
-        
-        /*close usb host*/
-        usb_fastboot = 1;
-        msleep(30);
-        msm_otg_set_host_port(1);
-    }
-    else if( !strcmp(buffer, USB_FASTBOOT_NORMAL) )
-    {/*open usb*/
-        if( !strcmp(g_fast_status, USB_FASTBOOT_NORMAL) )
-        {
-            pr_info( "the current usb fast status is %s, no need to change", g_fast_status );
-            return 0;
-        }
-        g_fast_status = USB_FASTBOOT_NORMAL;
-
-        /*open usb device*/
-        
-        /*open usb host*/
-        usb_fastboot = 0;
-        pmic_id_detect( NULL );
-        msm_otg_set_host_port(0);
-    }
-    else
-    {
-        pr_err( "set usb fast shutdown with wrong parameter:<%s>", buffer );
-        return -EIO;
-    }
-
-    return 0;
-}
-
-module_param_call(usb_fastboot, 
-                usb_set_fastboot, usb_get_fastboot, &usb_fastboot, 0644);
-MODULE_PARM_DESC(usb_fastboot, 
-                "usb fast shutdown status:<normal:0><fast shutdown:1>");
-
 
 static void android_work(struct work_struct *data)
 {
@@ -898,7 +754,6 @@ static struct android_usb_function ptp_function = {
 	.init		= ptp_function_init,
 	.cleanup	= ptp_function_cleanup,
 	.bind_config	= ptp_function_bind_config,
-	.ctrlrequest	= mtp_function_ctrlrequest,
 };
 
 
@@ -1456,6 +1311,13 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	char buf[256], *b;
 	int err;
 
+	mutex_lock(&dev->mutex);
+
+	if (dev->enabled) {
+		mutex_unlock(&dev->mutex);
+		return -EBUSY;
+	}
+
 	INIT_LIST_HEAD(&dev->enabled_functions);
 
 	strlcpy(buf, buff, sizeof(buf));
@@ -1463,10 +1325,6 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 
 	while (b) {
 		name = strsep(&b, ",");
-		if (!strcmp(name, "diag")) {
-			diag_flag = false;
-			diag_count = 0;
-		}
 		if (name) {
 			err = android_enable_function(dev, name);
 			if (err)
@@ -1498,7 +1356,6 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 
 	sscanf(buff, "%d", &enabled);
 	if (enabled && !dev->enabled) {
-		cdev->next_string_id = 0;
 		/* update values in composite driver's copy of device descriptor */
 		cdev->desc.idVendor = device_desc.idVendor;
 		cdev->desc.idProduct = device_desc.idProduct;
@@ -1652,11 +1509,10 @@ static int android_bind(struct usb_composite_dev *cdev)
 
 	usb_gadget_disconnect(gadget);
 
-#if 0
 	ret = android_init_functions(dev->functions, cdev);
 	if (ret)
 		return ret;
-#endif
+
 	/* Allocate string descriptor numbers ... note that string
 	 * contents can be overridden by the composite_dev glue.
 	 */
@@ -1673,20 +1529,16 @@ static int android_bind(struct usb_composite_dev *cdev)
 	device_desc.iProduct = id;
 
 	/* Default strings - should be updated by userspace */
-	strlcpy(manufacturer_string, "Huawei Incorporated",
+	strlcpy(manufacturer_string, "Android",
 		sizeof(manufacturer_string) - 1);
-	strlcpy(product_string, "Huawei USB Device", sizeof(product_string) - 1);
-	strlcpy(serial_string, "1234567890ABCDEF", sizeof(serial_string) - 1);
+	strlcpy(product_string, "Android", sizeof(product_string) - 1);
+	strlcpy(serial_string, "0123456789ABCDEF", sizeof(serial_string) - 1);
 
 	id = usb_string_id(cdev);
 	if (id < 0)
 		return id;
 	strings_dev[STRING_SERIAL_IDX].id = id;
 	device_desc.iSerialNumber = id;
-
-	ret = android_init_functions(dev->functions, cdev);
-	if (ret)
-		return ret;
 
 	gcnum = usb_gadget_controller_number(gadget);
 	if (gcnum >= 0)
