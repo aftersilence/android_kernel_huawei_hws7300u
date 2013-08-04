@@ -15,7 +15,5 @@
 #define __F_RMNET_H
 
 int rmnet_function_add(struct usb_configuration *c);
-        int level_mV;
-};
 
 #endif /* __F_RMNET_H */

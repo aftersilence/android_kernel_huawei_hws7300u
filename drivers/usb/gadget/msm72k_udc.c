@@ -2001,11 +2001,11 @@ static void usb_debugfs_init(struct usb_info *ui)
 		return;
 
 	debugfs_create_file("status", 0444, dent, ui, &debug_stat_ops);
-	debugfs_create_file("reset", 0664, dent, ui, &debug_reset_ops);
-	debugfs_create_file("cycle", 0664, dent, ui, &debug_cycle_ops);
-	debugfs_create_file("release_wlocks", 0664, dent, ui,
+	debugfs_create_file("reset", 0222, dent, ui, &debug_reset_ops);
+	debugfs_create_file("cycle", 0222, dent, ui, &debug_cycle_ops);
+	debugfs_create_file("release_wlocks", 0666, dent, ui,
 						&debug_wlocks_ops);
-	debugfs_create_file("prime_fail_countt", 0664, dent, ui,
+	debugfs_create_file("prime_fail_countt", 0666, dent, ui,
 						&prime_fail_ops);
 }
 #else

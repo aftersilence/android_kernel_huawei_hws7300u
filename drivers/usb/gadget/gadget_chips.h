@@ -221,7 +221,7 @@ static inline int usb_gadget_controller_number(struct usb_gadget *gadget)
 		return 0x25;
 	else if (gadget_is_s3c_hsotg(gadget))
 		return 0x26;
-	else if (gadget_is_msm72k(gadget))
+	else if (gadget_is_pch(gadget))
 		return 0x27;
 	else if (gadget_is_ci13xxx_msm(gadget))
 		return 0x28;
@@ -229,7 +229,7 @@ static inline int usb_gadget_controller_number(struct usb_gadget *gadget)
 		return 0x29;
 	else if (gadget_is_s3c_hsudc(gadget))
 		return 0x30;
-	else if (gadget_is_pch(gadget))
+	else if (gadget_is_msm72k(gadget))
 		return 0x31;
 
 	return -ENOENT;
