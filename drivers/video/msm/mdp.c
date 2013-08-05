@@ -1867,15 +1867,18 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 {
 	uint32 mdp_interrupt = 0;
 	struct mdp_dma_data *dma;
-	unsigned long flag;
+#ifndef CONFIG_FB_MSM_MDP22
 	struct mdp_hist_mgmt *mgmt = NULL;
+	char *base_addr;
 	int i, ret;
+#endif
 	int vsync_isr, disabled_clocks;
+	unsigned long flag;
 	/* Ensure all the register write are complete */
 	mb();
 
 	mdp_is_in_isr = TRUE;
-
+	do {
 		mdp_interrupt = inp32(MDP_INTR_STATUS);
 		outp32(MDP_INTR_CLEAR, mdp_interrupt);
 
@@ -1887,7 +1890,7 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 		}
 
 		if (!mdp_interrupt)
-		goto out;
+			break;
 
 	/*Primary Vsync interrupt*/
 	if (mdp_interrupt & MDP_PRIM_RDPTR) {

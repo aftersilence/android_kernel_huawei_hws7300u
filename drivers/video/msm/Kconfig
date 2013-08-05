@@ -703,21 +703,6 @@ config FB_MSM_HDMI_MSM_PANEL_DVI_SUPPORT
 	---help---
 	  Support for DVI mode for MSM HDMI 1080p Panel
 
-config FB_MSM_HDMI_MSM_PANEL_SPD_IFRAME_SUPPORT
-	depends on FB_MSM_HDMI_MSM_PANEL
-	bool "Enable SPD InfoFrame"
-	default y
-	---help---
-	  Support for HDMI SPD InfoFrane for MSM HDMI 1080p Panel
-
-config FB_MSM_HDMI_MSM_PANEL_EXTRA_EDID_INFO
-	depends on FB_MSM_HDMI_MSM_PANEL
-	bool "Enable userspace interface to read extra EDID information"
-	default y
-	---help---
-	  Support for userspace interface to read extra EDID information
-	  for MSM HDMI 1080p Panel
-
 config FB_MSM_HDMI_MSM_PANEL_HDCP_SUPPORT
 	depends on FB_MSM_HDMI_MSM_PANEL
 	bool "Use HDCP mode"
@@ -733,14 +718,6 @@ config FB_MSM_HDMI_MSM_PANEL_CEC_SUPPORT
 	---help---
 	  Support for HDMI CEC Feature
 	  Choose to enable CEC
-
-config FB_MSM_HDMI_MSM_PANEL_CEC_USES_UEVENT
-	depends on FB_MSM_HDMI_MSM_PANEL_CEC_SUPPORT
-	bool "Enable CEC uevent on recv"
-	default n
-	---help---
-	  Support for sending uevent on recving CEC frame
-	  Choose to enable CEC uevnet
 
 config FB_MSM_HDMI_MHL
 	depends on FB_MSM_HDMI_MSM_PANEL
