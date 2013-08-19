@@ -577,6 +577,10 @@ static void msm_otg_start_peripheral(struct otg_transceiver *xceiv, int on)
 		return;
 
 	if (on) {
+		if (pdata->set_gpio_charger) {
+		pdata->set_gpio_charger(0);
+		}
+
 		if (pdata->setup_gpio)
 			pdata->setup_gpio(USB_SWITCH_PERIPHERAL);
 		/* vote for minimum dma_latency to prevent idle
@@ -606,6 +610,10 @@ static void msm_otg_start_peripheral(struct otg_transceiver *xceiv, int on)
 		otg_pm_qos_update_latency(dev, 0);
 		if (pdata->setup_gpio)
 			pdata->setup_gpio(USB_SWITCH_DISABLE);
+
+		if (pdata->set_gpio_charger) {
+		pdata->set_gpio_charger(1);
+		}
 	}
 }
 
